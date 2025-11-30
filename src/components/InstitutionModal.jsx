@@ -11,21 +11,17 @@ export default function InstitutionModal({
   const [contact, setContact] = useState("");
   const [type, setType] = useState("");
 
-  const isEditMode = Boolean(institutionData);
+  const isEditMode = !!institutionData;
 
   useEffect(() => {
-    if (isOpen) {
-      if (isEditMode) {
-        setName(institutionData.name || "");
-        setContact(institutionData.contact || "");
-        setType(institutionData.type || "");
-      } else {
-        setName("");
-        setContact("");
-        setType("");
-      }
-    }
-  }, [isOpen, institutionData, isEditMode]);
+    if (!isOpen) return;
+
+    const data = institutionData || { name: "", contact: "", type: "" };
+
+    setName(data.name || "");
+    setContact(data.contact || "");
+    setType(data.type || "");
+  }, [isOpen, institutionData]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -41,103 +37,115 @@ export default function InstitutionModal({
     );
   };
 
-  if (!isOpen) {
-    return null;
-  }
+  if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      {}
-      <div className="relative w-full max-w-lg p-6 bg-white rounded-lg shadow-xl">
-        {}
-        <div className="flex items-center justify-between pb-4 border-b">
-          <h3 className="text-xl font-semibold text-gray-800">
-            {}
-            {isEditMode
-              ? "Ver / Editar Institución"
-              : "Registrar Nueva Institución"}
-          </h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      {/* CONTENEDOR GRANDE */}
+      <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+        {/* HEADER */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-slate-500">
+              {isEditMode ? "Institución registrada" : "Nueva institución TCU"}
+            </p>
+            <h3 className="text-lg font-semibold text-slate-900">
+              {isEditMode
+                ? "Ver / editar institución"
+                : "Registrar nueva institución"}
+            </h3>
+          </div>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-800"
+            className="p-1.5 rounded-full hover:bg-slate-200 text-slate-500"
           >
-            <LuX size={24} />
+            <LuX size={20} />
           </button>
         </div>
 
-        {}
+        {/* FORMULARIO */}
         <form
           id="institution-form"
           onSubmit={handleSubmit}
-          className="mt-6 space-y-4"
+          className="px-6 py-5 space-y-5"
         >
+          {/* fila 1: nombre */}
           <div>
             <label
               htmlFor="name"
-              className="block text-sm font-medium text-gray-700"
+              className="block text-sm font-medium text-slate-700 mb-1"
             >
-              Nombre de la Institución
+              Nombre de la institución
             </label>
             <input
-              type="text"
               id="name"
+              type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full p-2 mt-1 border border-gray-300 rounded-md shadow-sm"
+              className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[rgba(2,14,159,1)] focus:border-[rgba(2,14,159,1)]"
               placeholder="Ej: Hogar de Ancianos Luz y Vida"
             />
           </div>
 
-          <div>
-            <label
-              htmlFor="contact"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Correo de Contacto
-            </label>
-            <input
-              type="email"
-              id="contact"
-              value={contact}
-              onChange={(e) => setContact(e.target.value)}
-              className="w-full p-2 mt-1 border border-gray-300 rounded-md shadow-sm"
-              placeholder="Ej: ana@luzvida.org"
-            />
+          {/* fila 2: contacto + tipo */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label
+                htmlFor="contact"
+                className="block text-sm font-medium text-slate-700 mb-1"
+              >
+                Correo de contacto
+              </label>
+              <input
+                id="contact"
+                type="email"
+                value={contact}
+                onChange={(e) => setContact(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[rgba(2,14,159,1)] focus:border-[rgba(2,14,159,1)]"
+                placeholder="Ej: ana@luzvida.org"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="type"
+                className="block text-sm font-medium text-slate-700 mb-1"
+              >
+                Tipo de servicio
+              </label>
+              <input
+                id="type"
+                type="text"
+                value={type}
+                onChange={(e) => setType(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[rgba(2,14,159,1)] focus:border-[rgba(2,14,159,1)]"
+                placeholder="Ej: Cuidado de adulto mayor, Educación, ONG…"
+              />
+            </div>
           </div>
 
-          <div>
-            <label
-              htmlFor="type"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Tipo de Servicio
-            </label>
-            <input
-              type="text"
-              id="type"
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              className="w-full p-2 mt-1 border border-gray-300 rounded-md shadow-sm"
-              placeholder="Ej: Cuidado de adulto mayor, Educación, etc."
-            />
+          {/* NOTA INFORMATIVA */}
+          <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-xs text-slate-600">
+            Recordá que solo se aprueban instituciones **sin fines de lucro** y
+            con alineación al reglamento del TCU (ONGs, municipalidades, centros
+            educativos, fundaciones, etc.).
           </div>
         </form>
 
-        {}
-        <div className="flex justify-end pt-6 mt-6 space-x-3 border-t">
+        {/* FOOTER */}
+        <div className="flex justify-between items-center px-6 py-4 border-t border-slate-200 bg-slate-50">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+            className="px-4 py-2 text-xs md:text-sm font-medium text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200"
           >
             Cancelar
           </button>
           <button
             type="submit"
             form="institution-form"
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+            className="px-5 py-2 text-xs md:text-sm font-semibold text-white rounded-xl shadow-sm bg-[rgba(2,14,159,1)] hover:bg-indigo-900"
           >
-            {}
-            {isEditMode ? "Actualizar" : "Guardar y Aprobar"}
+            {isEditMode ? "Actualizar institución" : "Guardar y aprobar"}
           </button>
         </div>
       </div>

@@ -100,7 +100,7 @@ export default function AdminDashboard() {
 
     const matchesStatus = statusFilter === "all" || s.status === statusFilter;
 
-    // s.due está en formato "YYYY-MM-DD"
+    // formato de fecha "YYYY-MM-DD"
     const matchesFromDate = !fromDate || s.due >= fromDate;
     const matchesToDate = !toDate || s.due <= toDate;
 
