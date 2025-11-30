@@ -6,18 +6,29 @@ import InstitutionsPage from "./pages/InstitutionsPage.jsx";
 
 import { SolicitudProvider } from "./contexts/SolicitudContext.jsx";
 
+// 👇 importa tu logo
+import logoTechSeed from "./assets/logo-techseed.png";
+
 function Home() {
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
       <div className="w-full max-w-5xl bg-white rounded-3xl shadow-xl border border-slate-200 p-8 md:p-10">
-        {/* Título principal */}
-        <h1 className="text-4xl font-extrabold text-slate-900 text-center mb-3">
-          Fidélitas TechSeed
-        </h1>
-        <p className="text-center text-slate-600 mb-10 text-sm md:text-base">
-          Plataforma web para gestionar los proyectos de Trabajo Comunal
-          Universitario de forma clara, ordenada y digital.
-        </p>
+        {/* Encabezado principal */}
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600 mb-3">
+            <span className="w-2 h-2 rounded-full bg-[rgba(2,14,159,1)]" />
+            Proyecto TCU · Universidad Fidélitas
+          </div>
+
+          <h1 className="text-4xl font-extrabold text-slate-900 mb-1">
+            Fidélitas <span className="text-[#FFCA00]">TechSeed</span>
+          </h1>
+
+          <p className="text-center text-slate-600 text-sm md:text-base">
+            Plataforma web para gestionar los proyectos de Trabajo Comunal
+            Universitario (TCU) de forma clara, ordenada y digital.
+          </p>
+        </div>
 
         {/* Contenido en dos columnas */}
         <div className="grid md:grid-cols-2 gap-8 items-start">
@@ -91,27 +102,31 @@ function Home() {
             </div>
           </div>
 
-          {/* Columna derecha: imagen */}
+          {/* Columna derecha: logo + descripción */}
           <div className="space-y-4">
-            <div className="relative rounded-2xl overflow-hidden shadow-lg border border-slate-200">
-              <img
-                src="https://images.unsplash.com/photo-1523580846011-d3a5bc25702b?q=80&w=1200"
-                alt="Estudiantes trabajando en proyecto comunitario"
-                className="w-full h-56 object-cover"
-              />
-              <div className="absolute inset-0 bg-black/35 flex items-end p-4">
-                <p className="text-white text-sm md:text-base font-medium leading-tight">
-                  Conectando a estudiantes de la Universidad Fidélitas con
-                  proyectos que generan impacto en la comunidad.
-                </p>
+            <div className="relative rounded-2xl overflow-hidden shadow-lg border border-slate-200 bg-slate-50 flex flex-col items-center justify-center p-6">
+              <div className="w-40 h-40 mb-4 flex items-center justify-center">
+                <img
+                  src={logoTechSeed}
+                  alt="Logo Fidélitas TechSeed"
+                  className="w-full h-full object-contain"
+                />
               </div>
+              <p className="text-center text-sm md:text-base font-medium text-slate-800 leading-snug">
+                <span className="text-[rgba(2,14,159,1)] font-semibold">
+                  Fidélitas TechSeed
+                </span>{" "}
+                es un proyecto TCU que busca conectar a estudiantes de la
+                Universidad Fidélitas con iniciativas que generan impacto real
+                en la comunidad.
+              </p>
             </div>
 
             <p className="text-[11px] text-slate-500 leading-relaxed">
               Este sistema es un proyecto académico desarrollado por estudiantes
-              de Ingeniería en Desarrollo de Software menos Justin para
-              optimizar la gestión del Trabajo Comunal Universitario (TCU) y
-              modernizar los procesos internos del departamento.
+              de Ingeniería en Desarrollo de Software para optimizar la gestión
+              del Trabajo Comunal Universitario (TCU) y modernizar los procesos
+              internos del departamento.
             </p>
           </div>
         </div>
