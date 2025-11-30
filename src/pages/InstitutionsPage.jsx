@@ -105,7 +105,7 @@ export default function InstitutionsPage() {
         )
       );
     } else {
-      // nueva institución (se aprueba automáticamente en este mockup)
+      // nueva institución (se aprueba automáticamente en este mock)
       const newId =
         institutions.length > 0
           ? Math.max(...institutions.map((i) => i.id)) + 1
@@ -146,20 +146,28 @@ export default function InstitutionsPage() {
     new Set(institutions.map((i) => i.type).filter(Boolean))
   );
 
+  // ====== RESÚMENES ======
+  const total = institutions.length;
+  const approved = institutions.filter((i) => i.status === "Aprobada").length;
+  const pending = institutions.filter((i) => i.status === "Pendiente").length;
+  const rejected = institutions.filter((i) => i.status === "Rechazada").length;
+
   return (
     <>
       <div className="min-h-screen bg-slate-100 flex">
-        {/* SIDEBAR compartido con Admin */}
-        <aside className="w-64 bg-[rgba(2,14,159,1)] text-slate-100 flex flex-col">
-          <div className="h-16 flex items-center px-6 border-b border-blue-900/40">
-            <div className="w-9 h-9 rounded-xl bg-[#FFCA00] flex items-center justify-center text-slate-900 font-bold mr-3">
+        {/* SIDEBAR (igual estilo que AdminDashboard) */}
+        <aside className="w-64 bg-white border-r border-slate-200 shadow-sm hidden md:flex flex-col">
+          <div className="h-16 flex items-center px-6 border-b border-slate-200">
+            <div className="w-9 h-9 rounded-xl bg-[rgba(2,14,159,1)] flex items-center justify-center text-white font-bold mr-3">
               A
             </div>
             <div>
-              <p className="text-xs text-blue-100 uppercase tracking-wide">
+              <p className="text-xs text-slate-500 uppercase tracking-wide">
                 TCU Administración
               </p>
-              <p className="text-sm font-semibold">Panel de control</p>
+              <p className="text-sm font-semibold text-slate-800">
+                Panel de control
+              </p>
             </div>
           </div>
 
@@ -182,13 +190,10 @@ export default function InstitutionsPage() {
             />
             <SidebarItem icon={LuFile} label="Reportes" />
             <SidebarItem icon={LuCalendar} label="Calendario" />
-
-            <hr className="border-blue-900/50 my-4" />
-
             <SidebarItem icon={LuSettings} label="Configuración" />
           </nav>
 
-          <div className="p-4 border-t border-blue-900/40 text-[11px] text-blue-100/80">
+          <div className="p-4 border-t border-slate-200 text-[11px] text-slate-500">
             © {new Date().getFullYear()} Universidad Fidélitas
           </div>
         </aside>
@@ -216,24 +221,16 @@ export default function InstitutionsPage() {
 
           {/* CONTENIDO */}
           <main className="flex-1 p-4 md:p-6 overflow-y-auto space-y-6">
-            {/* TARJETAS RESUMEN PEQUEÑAS */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <MiniCard
+            {/* TARJETAS RESUMEN (como tickets) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <SummaryCard
                 title="Total instituciones"
-                value={institutions.length}
+                value={total}
+                color="blue"
               />
-              <MiniCard
-                title="Aprobadas"
-                value={
-                  institutions.filter((i) => i.status === "Aprobada").length
-                }
-              />
-              <MiniCard
-                title="Pendientes de revisión"
-                value={
-                  institutions.filter((i) => i.status === "Pendiente").length
-                }
-              />
+              <SummaryCard title="Aprobadas" value={approved} color="green" />
+              <SummaryCard title="Pendientes" value={pending} color="yellow" />
+              <SummaryCard title="Rechazadas" value={rejected} color="red" />
             </div>
 
             {/* TABLA + FILTROS */}
@@ -300,7 +297,7 @@ export default function InstitutionsPage() {
                     {filteredInstitutions.map((inst) => (
                       <tr
                         key={inst.id}
-                        className="border-b border-slate-100 hover:bg-slate-50"
+                        className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
                       >
                         <td className="p-3 text-slate-800 font-medium">
                           {inst.name}
@@ -381,8 +378,8 @@ function SidebarItem({ icon: Icon, label, active = false, href = "#" }) {
   const base =
     "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-sm transition-colors";
   const stateClasses = active
-    ? " bg-slate-900/30 text-white"
-    : " text-blue-100/90 hover:bg-slate-900/20";
+    ? " bg-[#ffd600] text-gray-800"
+    : " text-slate-700 hover:bg-yellow-100";
 
   return (
     <a href={href} className={base + " " + stateClasses}>
@@ -392,11 +389,27 @@ function SidebarItem({ icon: Icon, label, active = false, href = "#" }) {
   );
 }
 
-function MiniCard({ title, value }) {
+function SummaryCard({ title, value, color }) {
+  const colors = {
+    blue: "bg-blue-50 text-blue-700",
+    yellow: "bg-yellow-50 text-yellow-700",
+    green: "bg-emerald-50 text-emerald-700",
+    red: "bg-red-50 text-red-700",
+  };
+
   return (
-    <div className="p-4 bg-white rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
-      <p className="text-xs font-medium text-slate-600">{title}</p>
-      <p className="text-xl font-bold text-slate-900">{value}</p>
+    <div className="p-4 bg-white rounded-2xl shadow-sm border border-slate-200 flex items-center gap-3">
+      <div
+        className={`px-3 py-2 rounded-xl text-xs font-semibold ${colors[color]}`}
+      >
+        {title}
+      </div>
+      <div>
+        <p className="text-xs text-slate-500">Total</p>
+        <p className="text-2xl font-bold text-slate-900 leading-tight">
+          {value}
+        </p>
+      </div>
     </div>
   );
 }

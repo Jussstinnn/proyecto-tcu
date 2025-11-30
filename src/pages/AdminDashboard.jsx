@@ -117,20 +117,24 @@ export default function AdminDashboard() {
     <>
       {/* LAYOUT PRINCIPAL */}
       <div className="min-h-screen bg-slate-100 flex">
-        {/* SIDEBAR ADMIN */}
-        <aside className="w-64 bg-[rgba(2,14,159,1)] text-slate-100 flex flex-col">
-          <div className="h-16 flex items-center px-6 border-b border-blue-900/40">
-            <div className="w-9 h-9 rounded-xl bg-[#FFCA00] flex items-center justify-center text-slate-900 font-bold mr-3">
+        {/* SIDEBAR ADMIN - estilo similar al de estudiantes */}
+        <aside className="w-64 bg-white border-r border-slate-200 shadow-sm hidden md:flex flex-col">
+          {/* Header sidebar */}
+          <div className="h-16 flex items-center px-6 border-b border-slate-200">
+            <div className="w-9 h-9 rounded-xl bg-[rgba(2,14,159,1)] flex items-center justify-center text-white font-bold mr-3">
               A
             </div>
             <div>
-              <p className="text-xs text-blue-100 uppercase tracking-wide">
+              <p className="text-xs text-slate-500 uppercase tracking-wide">
                 TCU Administración
               </p>
-              <p className="text-sm font-semibold">Panel de control</p>
+              <p className="text-sm font-semibold text-slate-800">
+                Panel de control
+              </p>
             </div>
           </div>
 
+          {/* Menú */}
           <nav className="flex-1 p-4 space-y-1 text-sm">
             <SidebarItem icon={LuLayoutDashboard} label="Dashboard" active />
             <SidebarItem icon={LuTicket} label="Solicitudes (Tickets)" />
@@ -141,13 +145,10 @@ export default function AdminDashboard() {
             />
             <SidebarItem icon={LuFile} label="Reportes" />
             <SidebarItem icon={LuCalendar} label="Calendario" />
-
-            <hr className="border-blue-900/50 my-4" />
-
             <SidebarItem icon={LuSettings} label="Configuración" />
           </nav>
 
-          <div className="p-4 border-t border-blue-900/40 text-[11px] text-blue-100/80">
+          <div className="p-4 border-t border-slate-200 text-[11px] text-slate-500">
             © {new Date().getFullYear()} Universidad Fidélitas
           </div>
         </aside>
@@ -375,8 +376,8 @@ function SidebarItem({ icon: Icon, label, active = false, href = "#" }) {
   const base =
     "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-sm transition-colors";
   const stateClasses = active
-    ? " bg-slate-900/30 text-white"
-    : " text-blue-100/90 hover:bg-slate-900/20";
+    ? " bg-[#ffd600] text-gray-800"
+    : " text-slate-700 hover:bg-yellow-100";
 
   return (
     <a href={href} className={base + " " + stateClasses}>
