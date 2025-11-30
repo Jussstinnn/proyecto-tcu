@@ -12,7 +12,7 @@ function Home() {
       <div className="w-full max-w-5xl bg-white rounded-3xl shadow-xl border border-slate-200 p-8 md:p-10">
         {/* Título principal */}
         <h1 className="text-4xl font-extrabold text-slate-900 text-center mb-3">
-          Proyecto TCU
+          Fidélitas TechSeed
         </h1>
         <p className="text-center text-slate-600 mb-10 text-sm md:text-base">
           Plataforma web para gestionar los proyectos de Trabajo Comunal
@@ -109,9 +109,9 @@ function Home() {
 
             <p className="text-[11px] text-slate-500 leading-relaxed">
               Este sistema es un proyecto académico desarrollado por estudiantes
-              de Ingeniería en Sistemas para optimizar la gestión del Trabajo
-              Comunal Universitario (TCU) y modernizar los procesos internos del
-              departamento.
+              de Ingeniería en Desarrollo de Software menos Justin para
+              optimizar la gestión del Trabajo Comunal Universitario (TCU) y
+              modernizar los procesos internos del departamento.
             </p>
           </div>
         </div>

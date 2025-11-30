@@ -1,45 +1,42 @@
-
-
-import { useState, useEffect } from "react"; 
+import { useState, useEffect } from "react";
 import { LuX } from "react-icons/lu";
 
-export default function InstitutionModal({ isOpen, onClose, onSave, institutionData }) {
+export default function InstitutionModal({
+  isOpen,
+  onClose,
+  onSave,
+  institutionData,
+}) {
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
   const [type, setType] = useState("");
 
-
   const isEditMode = Boolean(institutionData);
 
-  
   useEffect(() => {
     if (isOpen) {
       if (isEditMode) {
-        
         setName(institutionData.name || "");
         setContact(institutionData.contact || "");
         setType(institutionData.type || "");
       } else {
-        
         setName("");
         setContact("");
         setType("");
       }
     }
-  }, [isOpen, institutionData, isEditMode]); 
+  }, [isOpen, institutionData, isEditMode]);
 
-  
   const handleSubmit = (e) => {
-    e.preventDefault(); 
-    
+    e.preventDefault();
+
     if (!name || !contact) {
       alert("Por favor, complete el nombre y el contacto.");
       return;
     }
 
-    
     onSave(
-      { name, contact, type }, 
+      { name, contact, type },
       institutionData ? institutionData.id : null
     );
   };
@@ -49,17 +46,16 @@ export default function InstitutionModal({ isOpen, onClose, onSave, institutionD
   }
 
   return (
-    
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      
       {}
       <div className="relative w-full max-w-lg p-6 bg-white rounded-lg shadow-xl">
-        
         {}
         <div className="flex items-center justify-between pb-4 border-b">
           <h3 className="text-xl font-semibold text-gray-800">
             {}
-            {isEditMode ? "Ver / Editar Institución" : "Registrar Nueva Institución"}
+            {isEditMode
+              ? "Ver / Editar Institución"
+              : "Registrar Nueva Institución"}
           </h3>
           <button
             onClick={onClose}
@@ -70,23 +66,33 @@ export default function InstitutionModal({ isOpen, onClose, onSave, institutionD
         </div>
 
         {}
-        <form id="institution-form" onSubmit={handleSubmit} className="mt-6 space-y-4">
+        <form
+          id="institution-form"
+          onSubmit={handleSubmit}
+          className="mt-6 space-y-4"
+        >
           <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="name"
+              className="block text-sm font-medium text-gray-700"
+            >
               Nombre de la Institución
             </label>
             <input
               type="text"
               id="name"
-              value={name} 
+              value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full p-2 mt-1 border border-gray-300 rounded-md shadow-sm"
               placeholder="Ej: Hogar de Ancianos Luz y Vida"
             />
           </div>
-          
+
           <div>
-            <label htmlFor="contact" className="block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="contact"
+              className="block text-sm font-medium text-gray-700"
+            >
               Correo de Contacto
             </label>
             <input
@@ -100,7 +106,10 @@ export default function InstitutionModal({ isOpen, onClose, onSave, institutionD
           </div>
 
           <div>
-            <label htmlFor="type" className="block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="type"
+              className="block text-sm font-medium text-gray-700"
+            >
               Tipo de Servicio
             </label>
             <input

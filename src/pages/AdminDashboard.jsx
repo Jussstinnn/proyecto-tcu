@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   LuLayoutDashboard,
-  LuMail,
   LuCalendar,
   LuTicket,
   LuFile,
@@ -16,6 +15,13 @@ export default function AdminDashboard() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSolicitud, setSelectedSolicitud] = useState(null);
+
+  // ====== FILTROS ======
+  const [search, setSearch] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   const openModal = (solicitud) => {
     setSelectedSolicitud(solicitud);
@@ -79,91 +85,107 @@ export default function AdminDashboard() {
     }
   };
 
+  // ====== APLICAR FILTROS ======
+  const filteredSolicitudes = solicitudes.filter((s) => {
+    const searchText = search.toLowerCase();
+
+    const matchesSearch =
+      !searchText ||
+      s.id.toLowerCase().includes(searchText) ||
+      s.req.toLowerCase().includes(searchText) ||
+      (s.subj || "").toLowerCase().includes(searchText);
+
+    const matchesPriority =
+      priorityFilter === "all" || s.prio === priorityFilter;
+
+    const matchesStatus = statusFilter === "all" || s.status === statusFilter;
+
+    // s.due está en formato "YYYY-MM-DD"
+    const matchesFromDate = !fromDate || s.due >= fromDate;
+    const matchesToDate = !toDate || s.due <= toDate;
+
+    return (
+      matchesSearch &&
+      matchesPriority &&
+      matchesStatus &&
+      matchesFromDate &&
+      matchesToDate
+    );
+  });
+
   return (
     <>
-      <div className="flex h-screen bg-gray-100">
-        {}
-        <aside
-          className="w-64 text-gray-100 p-6 flex flex-col"
-          style={{ backgroundColor: "rgba(2, 14, 159, 1)" }}
-        >
-          {}
-          <h1 className="text-white text-2xl font-bold mb-8">TCU Admin</h1>
-          <nav className="flex-1">
-            <ul className="space-y-3">
-              <li>
-                <a
-                  href="/admin"
-                  className="flex items-center space-x-3 p-2 rounded-md bg-yellow-500 text-white"
-                >
-                  <LuLayoutDashboard /> <span>Dashboard</span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/admin"
-                  className="flex items-center space-x-3 p-2 rounded-md hover:text-[#ffd600]"
-                >
-                  <LuTicket /> <span>Solicitudes (Tickets)</span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/instituciones"
-                  className="flex items-center space-x-3 p-2 rounded-md hover:text-[#ffd600]"
-                >
-                  <LuUsers /> <span>Instituciones</span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="#"
-                  className="flex items-center space-x-3 p-2 rounded-md hover:text-[#ffd600]"
-                >
-                  <LuFile /> <span>Reportes</span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="#"
-                  className="flex items-center space-x-3 p-2 rounded-md hover:text-[#ffd600]"
-                >
-                  <LuCalendar /> <span>Calendario</span>
-                </a>
-              </li>
-              <hr className="border-gray-700 my-4" />
-              <li>
-                <a
-                  href="#"
-                  className="flex items-center space-x-3 p-2 rounded-md hover:text-[#ffd600]"
-                >
-                  <LuSettings /> <span>Configuración</span>
-                </a>
-              </li>
-            </ul>
+      {/* LAYOUT PRINCIPAL */}
+      <div className="min-h-screen bg-slate-100 flex">
+        {/* SIDEBAR ADMIN */}
+        <aside className="w-64 bg-[rgba(2,14,159,1)] text-slate-100 flex flex-col">
+          <div className="h-16 flex items-center px-6 border-b border-blue-900/40">
+            <div className="w-9 h-9 rounded-xl bg-[#FFCA00] flex items-center justify-center text-slate-900 font-bold mr-3">
+              A
+            </div>
+            <div>
+              <p className="text-xs text-blue-100 uppercase tracking-wide">
+                TCU Administración
+              </p>
+              <p className="text-sm font-semibold">Panel de control</p>
+            </div>
+          </div>
+
+          <nav className="flex-1 p-4 space-y-1 text-sm">
+            <SidebarItem icon={LuLayoutDashboard} label="Dashboard" active />
+            <SidebarItem icon={LuTicket} label="Solicitudes (Tickets)" />
+            <SidebarItem
+              icon={LuUsers}
+              label="Instituciones"
+              href="/instituciones"
+            />
+            <SidebarItem icon={LuFile} label="Reportes" />
+            <SidebarItem icon={LuCalendar} label="Calendario" />
+
+            <hr className="border-blue-900/50 my-4" />
+
+            <SidebarItem icon={LuSettings} label="Configuración" />
           </nav>
-          <div className="mt-auto text-sm">
-            <p>&copy; {new Date().getFullYear()} U Fidélitas</p>
+
+          <div className="p-4 border-t border-blue-900/40 text-[11px] text-blue-100/80">
+            © {new Date().getFullYear()} Universidad Fidélitas
           </div>
         </aside>
 
-        {}
-        <main className="flex-1 p-8 overflow-y-auto">
-          <div>
-            {}
-            <div className="flex justify-between items-center mb-6">
-              <h1 className="text-3xl font-bold text-gray-800">
-                Bandeja de Solicitudes
-              </h1>
-              <div className="flex items-center space-x-4">
-                <span className="font-medium">Justin Montoya</span>
-              </div>
+        {/* CONTENEDOR PRINCIPAL */}
+        <div className="flex-1 flex flex-col">
+          {/* TOPBAR */}
+          <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6">
+            <div>
+              <p className="text-xs text-slate-500 uppercase tracking-wide">
+                Panel administrativo
+              </p>
+              <p className="text-sm md:text-base font-semibold text-slate-800">
+                Bandeja de solicitudes TCU
+              </p>
             </div>
 
-            {}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="flex items-center gap-3">
+              <div className="text-right hidden sm:block">
+                <p className="text-xs font-semibold text-slate-700">
+                  Justin Montoya
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  Coordinación TCU (demo)
+                </p>
+              </div>
+              <div className="w-9 h-9 rounded-full bg-slate-800 text-white flex items-center justify-center text-xs font-bold">
+                JM
+              </div>
+            </div>
+          </header>
+
+          {/* CONTENIDO */}
+          <main className="flex-1 p-4 md:p-6 overflow-y-auto space-y-6">
+            {/* TARJETAS RESUMEN */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <SummaryCard
-                title="Total Solicitudes"
+                title="Total solicitudes"
                 value={solicitudes.length}
                 color="blue"
               />
@@ -194,86 +216,147 @@ export default function AdminDashboard() {
               />
             </div>
 
-            {}
-            <div className="bg-white rounded-lg shadow-md overflow-hidden">
-              <table className="w-full">
-                {}
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="p-4 text-left text-sm font-semibold text-gray-600">
-                      ID
-                    </th>
-                    <th className="p-4 text-left text-sm font-semibold text-gray-600">
-                      Estudiante
-                    </th>
-                    <th className="p-4 text-left text-sm font-semibold text-gray-600">
-                      Asunto
-                    </th>
-                    <th className="p-4 text-left text-sm font-semibold text-gray-600">
-                      Prioridad
-                    </th>
-                    <th className="p-4 text-left text-sm font-semibold text-gray-600">
-                      Estado
-                    </th>
-                    <th className="p-4 text-left text-sm font-semibold text-gray-600">
-                      Vencimiento
-                    </th>
-                    <th className="p-4 text-left text-sm font-semibold text-gray-600">
-                      Acción
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {solicitudes.map((ticket) => (
-                    <tr
-                      key={ticket.id}
-                      className="border-b border-gray-200 hover:bg-gray-50"
-                    >
-                      {}
-                      <td className="p-4 text-sm text-gray-800 font-medium">
-                        {ticket.id}
-                      </td>
-                      <td className="p-4 text-sm text-gray-700">
-                        {ticket.req}
-                      </td>
-                      <td className="p-4 text-sm text-gray-700">
-                        {ticket.subj}
-                      </td>
-                      <td className="p-4 text-sm">
-                        <span
-                          className={`px-3 py-1 rounded-full font-medium text-xs ${getPriorityClass(ticket.prio)}`}
-                        >
-                          {ticket.prio}
-                        </span>
-                      </td>
-                      <td className="p-4 text-sm">
-                        <span
-                          className={`px-3 py-1 rounded-full font-medium text-xs ${getStatusClass(ticket.status)}`}
-                        >
-                          {ticket.status}
-                        </span>
-                      </td>
-                      <td className="p-4 text-sm text-gray-700">
-                        {ticket.due}
-                      </td>
-                      <td className="p-4 text-sm text-gray-700">
-                        <button
-                          onClick={() => openModal(ticket)}
-                          className="text-blue-600 hover:text-blue-800"
-                        >
-                          Ver
-                        </button>
-                      </td>
+            {/* TABLA PRINCIPAL */}
+            <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+              {/* Encabezado + filtros */}
+              <div className="px-5 pt-4 pb-3 border-b border-slate-200 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-sm font-semibold text-slate-900">
+                    Solicitudes recibidas
+                  </h2>
+                  <p className="text-[11px] text-slate-500">
+                    Filtra por estudiante, estado, prioridad o rango de fechas.
+                  </p>
+                </div>
+
+                {/* BARRA DE FILTROS */}
+                <div className="flex flex-wrap gap-3">
+                  <input
+                    type="text"
+                    placeholder="Buscar por ID, estudiante o asunto..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-full md:w-64"
+                  />
+
+                  <select
+                    value={priorityFilter}
+                    onChange={(e) => setPriorityFilter(e.target.value)}
+                    className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm w-[140px]"
+                  >
+                    <option value="all">Todas las prioridades</option>
+                    <option value="High">Alta</option>
+                    <option value="Medium">Media</option>
+                    <option value="Low">Baja</option>
+                  </select>
+
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm w-[160px]"
+                  >
+                    <option value="all">Todos los estados</option>
+                    <option value="Enviado">Enviado</option>
+                    <option value="En Revisión">En Revisión</option>
+                    <option value="Observado">Observado</option>
+                    <option value="Aprobado">Aprobado</option>
+                    <option value="Rechazado">Rechazado</option>
+                  </select>
+
+                  <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                    <span>Vencimiento:</span>
+                    <input
+                      type="date"
+                      value={fromDate}
+                      onChange={(e) => setFromDate(e.target.value)}
+                      className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
+                    />
+                    <span>-</span>
+                    <input
+                      type="date"
+                      value={toDate}
+                      onChange={(e) => setToDate(e.target.value)}
+                      className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* TABLA */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="p-3 text-left">ID</th>
+                      <th className="p-3 text-left">Estudiante</th>
+                      <th className="p-3 text-left">Asunto</th>
+                      <th className="p-3 text-left">Prioridad</th>
+                      <th className="p-3 text-left">Estado</th>
+                      <th className="p-3 text-left">Vencimiento</th>
+                      <th className="p-3 text-left">Acción</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </main>
+                  </thead>
+                  <tbody>
+                    {filteredSolicitudes.map((ticket) => (
+                      <tr
+                        key={ticket.id}
+                        className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
+                      >
+                        <td className="p-3 font-medium text-slate-800">
+                          {ticket.id}
+                        </td>
+                        <td className="p-3 text-slate-700">{ticket.req}</td>
+                        <td className="p-3 text-slate-700">{ticket.subj}</td>
+                        <td className="p-3">
+                          <span
+                            className={`px-3 py-1 rounded-full font-medium text-[11px] ${getPriorityClass(
+                              ticket.prio
+                            )}`}
+                          >
+                            {ticket.prio}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`px-3 py-1 rounded-full font-medium text-[11px] ${getStatusClass(
+                              ticket.status
+                            )}`}
+                          >
+                            {ticket.status}
+                          </span>
+                        </td>
+                        <td className="p-3 text-slate-700">{ticket.due}</td>
+                        <td className="p-3 text-slate-700">
+                          <button
+                            onClick={() => openModal(ticket)}
+                            className="text-[rgba(2,14,159,1)] hover:underline font-semibold text-xs"
+                          >
+                            Ver detalle
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+
+                    {filteredSolicitudes.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={7}
+                          className="p-6 text-center text-sm text-slate-500"
+                        >
+                          No se encontraron solicitudes con los filtros
+                          seleccionados.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </main>
+        </div>
       </div>
 
-      {}
+      {/* MODAL DE SOLICITUD */}
       <SolicitudModal
         isOpen={isModalOpen}
         onClose={closeModal}
@@ -286,22 +369,45 @@ export default function AdminDashboard() {
   );
 }
 
+/* ========= SIDEBAR ITEM ========= */
+
+function SidebarItem({ icon: Icon, label, active = false, href = "#" }) {
+  const base =
+    "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-sm transition-colors";
+  const stateClasses = active
+    ? " bg-slate-900/30 text-white"
+    : " text-blue-100/90 hover:bg-slate-900/20";
+
+  return (
+    <a href={href} className={base + " " + stateClasses}>
+      {Icon && <Icon className="text-lg" />}
+      <span>{label}</span>
+    </a>
+  );
+}
+
+/* ========= SUMMARY CARD ========= */
+
 function SummaryCard({ title, value, color }) {
   const colors = {
-    blue: "text-blue-600 bg-blue-50",
-    yellow: "text-yellow-600 bg-yellow-50",
-    green: "text-green-600 bg-green-50",
-    red: "text-red-600 bg-red-50",
+    blue: "bg-blue-50 text-blue-700",
+    yellow: "bg-yellow-50 text-yellow-700",
+    green: "bg-emerald-50 text-emerald-700",
+    red: "bg-red-50 text-red-700",
   };
 
   return (
-    <div
-      className={`p-6 bg-white rounded-xl shadow-md flex items-center space-x-4`}
-    >
-      <div className={`p-3 rounded-full ${colors[color]}`}>{}</div>
+    <div className="p-4 bg-white rounded-2xl shadow-sm border border-slate-200 flex items-center gap-3">
+      <div
+        className={`px-3 py-2 rounded-xl text-xs font-semibold ${colors[color]}`}
+      >
+        {title}
+      </div>
       <div>
-        <p className="text-sm font-medium text-gray-500">{title}</p>
-        <p className="text-2xl font-bold text-gray-900">{value}</p>
+        <p className="text-xs text-slate-500">Total</p>
+        <p className="text-2xl font-bold text-slate-900 leading-tight">
+          {value}
+        </p>
       </div>
     </div>
   );

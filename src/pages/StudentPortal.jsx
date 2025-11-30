@@ -288,8 +288,8 @@ function SidebarItem({ icon: Icon, label, active, onClick }) {
   const base =
     "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-sm";
   const activeClasses = active
-    ? " bg-slate-900 text-white"
-    : " text-slate-700 hover:bg-slate-100";
+    ? " bg-[#ffd600] text-gray-800"
+    : " text-slate-700 hover:bg-yellow-100";
 
   return (
     <button onClick={onClick} className={base + activeClasses}>

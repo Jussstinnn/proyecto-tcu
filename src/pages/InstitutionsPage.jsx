@@ -50,21 +50,25 @@ const initialInstitutions = [
 const getStatusClass = (status) => {
   switch (status) {
     case "Aprobada":
-      return "bg-green-100 text-green-700";
+      return "bg-emerald-100 text-emerald-700";
     case "Pendiente":
       return "bg-yellow-100 text-yellow-700";
     case "Rechazada":
       return "bg-red-100 text-red-700";
     default:
-      return "bg-gray-100 text-gray-700";
+      return "bg-slate-100 text-slate-700";
   }
 };
 
 export default function InstitutionsPage() {
   const [institutions, setInstitutions] = useState(initialInstitutions);
   const [isModalOpen, setIsModalOpen] = useState(false);
-
   const [selectedInstitution, setSelectedInstitution] = useState(null);
+
+  // ====== FILTROS ======
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
 
   const openModal = (institution) => {
     setSelectedInstitution(institution);
@@ -94,13 +98,18 @@ export default function InstitutionsPage() {
 
   const handleSave = (formData, id) => {
     if (id) {
+      // editar
       setInstitutions((current) =>
         current.map((inst) =>
           inst.id === id ? { ...inst, ...formData } : inst
         )
       );
     } else {
-      const newId = Math.max(...institutions.map((i) => i.id)) + 1;
+      // nueva institución (se aprueba automáticamente en este mockup)
+      const newId =
+        institutions.length > 0
+          ? Math.max(...institutions.map((i) => i.id)) + 1
+          : 1;
       const newInstitution = {
         ...formData,
         id: newId,
@@ -112,162 +121,250 @@ export default function InstitutionsPage() {
     closeModal();
   };
 
+  // ====== APLICAR FILTROS ======
+  const filteredInstitutions = institutions.filter((inst) => {
+    const searchText = search.toLowerCase();
+
+    const matchesSearch =
+      !searchText ||
+      inst.name.toLowerCase().includes(searchText) ||
+      inst.contact.toLowerCase().includes(searchText) ||
+      (inst.type || "").toLowerCase().includes(searchText);
+
+    const matchesStatus =
+      statusFilter === "all" || inst.status === statusFilter;
+
+    const matchesType =
+      typeFilter === "all" ||
+      inst.type.toLowerCase() === typeFilter.toLowerCase();
+
+    return matchesSearch && matchesStatus && matchesType;
+  });
+
+  // tipos únicos para el combo
+  const uniqueTypes = Array.from(
+    new Set(institutions.map((i) => i.type).filter(Boolean))
+  );
+
   return (
     <>
-      <div className="flex h-screen bg-gray-100">
-        {}
-        <aside
-          className="w-64 text-gray-100 p-6 flex flex-col"
-          style={{ backgroundColor: "rgba(2, 14, 159, 1)" }}
-        >
-          {}
-          <h1 className="text-white text-2xl font-bold mb-8">TCU Admin</h1>
-          <nav className="flex-1">
-            <ul className="space-y-3">
-              <li>
-                <a
-                  href="/admin"
-                  className="flex items-center space-x-3 p-2 rounded-md hover:text-[#ffd600]"
-                >
-                  <LuLayoutDashboard /> <span>Dashboard</span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/admin"
-                  className="flex items-center space-x-3 p-2 rounded-md hover:text-[#ffd600]"
-                >
-                  <LuTicket /> <span>Solicitudes (Tickets)</span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/instituciones"
-                  className="flex items-center space-x-3 p-2 rounded-md bg-yellow-500 text-white"
-                >
-                  <LuUsers /> <span>Instituciones</span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="#"
-                  className="flex items-center space-x-3 p-2 rounded-md hover:text-[#ffd600]"
-                >
-                  <LuFile /> <span>Reportes</span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="#"
-                  className="flex items-center space-x-3 p-2 rounded-md hover:text-[#ffd600]"
-                >
-                  <LuCalendar /> <span>Calendario</span>
-                </a>
-              </li>
-              <hr className="border-gray-700 my-4" />
-              <li>
-                <a
-                  href="#"
-                  className="flex items-center space-x-3 p-2 rounded-md hover:text-[#ffd600]"
-                >
-                  <LuSettings /> <span>Configuración</span>
-                </a>
-              </li>
-            </ul>
+      <div className="min-h-screen bg-slate-100 flex">
+        {/* SIDEBAR compartido con Admin */}
+        <aside className="w-64 bg-[rgba(2,14,159,1)] text-slate-100 flex flex-col">
+          <div className="h-16 flex items-center px-6 border-b border-blue-900/40">
+            <div className="w-9 h-9 rounded-xl bg-[#FFCA00] flex items-center justify-center text-slate-900 font-bold mr-3">
+              A
+            </div>
+            <div>
+              <p className="text-xs text-blue-100 uppercase tracking-wide">
+                TCU Administración
+              </p>
+              <p className="text-sm font-semibold">Panel de control</p>
+            </div>
+          </div>
+
+          <nav className="flex-1 p-4 space-y-1 text-sm">
+            <SidebarItem
+              icon={LuLayoutDashboard}
+              label="Dashboard"
+              href="/admin"
+            />
+            <SidebarItem
+              icon={LuTicket}
+              label="Solicitudes (Tickets)"
+              href="/admin"
+            />
+            <SidebarItem
+              icon={LuUsers}
+              label="Instituciones"
+              href="/instituciones"
+              active
+            />
+            <SidebarItem icon={LuFile} label="Reportes" />
+            <SidebarItem icon={LuCalendar} label="Calendario" />
+
+            <hr className="border-blue-900/50 my-4" />
+
+            <SidebarItem icon={LuSettings} label="Configuración" />
           </nav>
-          <div className="mt-auto text-sm">
-            <p>&copy; {new Date().getFullYear()} U Fidélitas</p>
+
+          <div className="p-4 border-t border-blue-900/40 text-[11px] text-blue-100/80">
+            © {new Date().getFullYear()} Universidad Fidélitas
           </div>
         </aside>
 
-        {}
-        <main className="flex-1 p-8 overflow-y-auto">
-          {}
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-3xl font-bold text-gray-800">
-              Gestión de Instituciones
-            </h1>
+        {/* CONTENEDOR PRINCIPAL */}
+        <div className="flex-1 flex flex-col">
+          {/* TOPBAR */}
+          <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6">
+            <div>
+              <p className="text-xs text-slate-500 uppercase tracking-wide">
+                Gestión de instituciones TCU
+              </p>
+              <p className="text-sm md:text-base font-semibold text-slate-800">
+                Catálogo de instituciones aliadas
+              </p>
+            </div>
+
             <button
               onClick={() => openModal(null)}
-              className="px-5 py-2 bg-[rgba(2,14,200,1)] text-white font-semibold rounded-lg shadow-md hover:bg-[rgba(2,14,100,1)] transition-colors duration-200"
+              className="px-4 py-2 bg-[rgba(2,14,159,1)] text-white text-xs md:text-sm font-semibold rounded-xl shadow-sm hover:bg-indigo-900"
             >
-              + Registrar Nueva
+              + Registrar institución
             </button>
-          </div>
+          </header>
 
-          {}
-          <div className="bg-white rounded-lg shadow-md overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="p-4 text-left text-sm font-semibold text-gray-600">
-                    Nombre de Institución
-                  </th>
-                  <th className="p-4 text-left text-sm font-semibold text-gray-600">
-                    Contacto
-                  </th>
-                  <th className="p-4 text-left text-sm font-semibold text-gray-600">
-                    Estado
-                  </th>
-                  <th className="p-4 text-left text-sm font-semibold text-gray-600">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {institutions.map((inst) => (
-                  <tr
-                    key={inst.id}
-                    className="border-b border-gray-200 hover:bg-gray-50"
+          {/* CONTENIDO */}
+          <main className="flex-1 p-4 md:p-6 overflow-y-auto space-y-6">
+            {/* TARJETAS RESUMEN PEQUEÑAS */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <MiniCard
+                title="Total instituciones"
+                value={institutions.length}
+              />
+              <MiniCard
+                title="Aprobadas"
+                value={
+                  institutions.filter((i) => i.status === "Aprobada").length
+                }
+              />
+              <MiniCard
+                title="Pendientes de revisión"
+                value={
+                  institutions.filter((i) => i.status === "Pendiente").length
+                }
+              />
+            </div>
+
+            {/* TABLA + FILTROS */}
+            <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+              {/* Header + filtros */}
+              <div className="px-5 pt-4 pb-3 border-b border-slate-200 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-sm font-semibold text-slate-900">
+                    Instituciones registradas
+                  </h2>
+                  <p className="text-[11px] text-slate-500">
+                    Filtra por nombre, tipo de servicio o estado.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <input
+                    type="text"
+                    placeholder="Buscar por nombre, contacto o tipo..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-full md:w-72"
+                  />
+
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm w-[160px]"
                   >
-                    <td className="p-4 text-sm text-gray-800 font-medium">
-                      {inst.name}
-                    </td>
-                    <td className="p-4 text-sm text-gray-700">
-                      {inst.contact}
-                    </td>
-                    <td className="p-4 text-sm">
-                      <span
-                        className={`px-3 py-1 rounded-full font-medium text-xs ${getStatusClass(inst.status)}`}
+                    <option value="all">Todos los estados</option>
+                    <option value="Aprobada">Aprobadas</option>
+                    <option value="Pendiente">Pendientes</option>
+                    <option value="Rechazada">Rechazadas</option>
+                  </select>
+
+                  <select
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value)}
+                    className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm w-[180px]"
+                  >
+                    <option value="all">Todos los tipos</option>
+                    {uniqueTypes.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* TABLA */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="p-3 text-left">Nombre de institución</th>
+                      <th className="p-3 text-left">Contacto</th>
+                      <th className="p-3 text-left">Tipo de servicio</th>
+                      <th className="p-3 text-left">Estado</th>
+                      <th className="p-3 text-left">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredInstitutions.map((inst) => (
+                      <tr
+                        key={inst.id}
+                        className="border-b border-slate-100 hover:bg-slate-50"
                       >
-                        {inst.status}
-                      </span>
-                    </td>
-                    <td className="p-4 text-sm text-gray-700 space-x-3">
-                      {inst.status === "Pendiente" && (
-                        <>
-                          <button
-                            onClick={() => handleApprove(inst.id)}
-                            className="text-green-600 hover:text-green-800 font-medium"
+                        <td className="p-3 text-slate-800 font-medium">
+                          {inst.name}
+                        </td>
+                        <td className="p-3 text-slate-700">{inst.contact}</td>
+                        <td className="p-3 text-slate-700">{inst.type}</td>
+                        <td className="p-3 text-sm">
+                          <span
+                            className={`px-3 py-1 rounded-full font-medium text-[11px] ${getStatusClass(
+                              inst.status
+                            )}`}
                           >
-                            Aprobar
-                          </button>
-                          <button
-                            onClick={() => handleReject(inst.id)}
-                            className="text-red-600 hover:text-red-800 font-medium"
-                          >
-                            Rechazar
-                          </button>
-                        </>
-                      )}
-                      {inst.status !== "Pendiente" && (
-                        <button
-                          onClick={() => openModal(inst)}
-                          className="text-blue-600 hover:text-blue-800 font-medium"
+                            {inst.status}
+                          </span>
+                        </td>
+                        <td className="p-3 text-sm text-slate-700 space-x-3">
+                          {inst.status === "Pendiente" && (
+                            <>
+                              <button
+                                onClick={() => handleApprove(inst.id)}
+                                className="text-emerald-600 hover:text-emerald-800 font-semibold text-xs"
+                              >
+                                Aprobar
+                              </button>
+                              <button
+                                onClick={() => handleReject(inst.id)}
+                                className="text-red-600 hover:text-red-800 font-semibold text-xs"
+                              >
+                                Rechazar
+                              </button>
+                            </>
+                          )}
+                          {inst.status !== "Pendiente" && (
+                            <button
+                              onClick={() => openModal(inst)}
+                              className="text-[rgba(2,14,159,1)] hover:underline font-semibold text-xs"
+                            >
+                              Ver / editar
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+
+                    {filteredInstitutions.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={5}
+                          className="p-6 text-center text-sm text-slate-500"
                         >
-                          Ver
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </main>
+                          No se encontraron instituciones con los filtros
+                          seleccionados.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </main>
+        </div>
       </div>
 
-      {}
+      {/* MODAL */}
       <InstitutionModal
         isOpen={isModalOpen}
         onClose={closeModal}
@@ -275,5 +372,31 @@ export default function InstitutionsPage() {
         institutionData={selectedInstitution}
       />
     </>
+  );
+}
+
+/* ========= COMPONENTES DE APOYO ========= */
+
+function SidebarItem({ icon: Icon, label, active = false, href = "#" }) {
+  const base =
+    "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-sm transition-colors";
+  const stateClasses = active
+    ? " bg-slate-900/30 text-white"
+    : " text-blue-100/90 hover:bg-slate-900/20";
+
+  return (
+    <a href={href} className={base + " " + stateClasses}>
+      {Icon && <Icon className="text-lg" />}
+      <span>{label}</span>
+    </a>
+  );
+}
+
+function MiniCard({ title, value }) {
+  return (
+    <div className="p-4 bg-white rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+      <p className="text-xs font-medium text-slate-600">{title}</p>
+      <p className="text-xl font-bold text-slate-900">{value}</p>
+    </div>
   );
 }
