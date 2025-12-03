@@ -6,7 +6,6 @@ import InstitutionsPage from "./pages/InstitutionsPage.jsx";
 
 import { SolicitudProvider } from "./contexts/SolicitudContext.jsx";
 
-// 👇 importa tu logo
 import logoTechSeed from "./assets/logo-techseed.png";
 
 function Home() {

@@ -57,7 +57,7 @@ export default function SolicitudModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      {/* CARD PRINCIPAL (mismo tamaño aprox, pero más limpio) */}
+      {/* CARD PRINCIPAL) */}
       <div className="relative w-full max-w-4xl max-h-[85vh] bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
         {/* HEADER */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">

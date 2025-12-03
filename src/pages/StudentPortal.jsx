@@ -57,7 +57,7 @@ function StudentWizard({ onCompleted }) {
     alert("¡Solicitud enviada con éxito!");
 
     if (onCompleted) {
-      onCompleted(); // pasar a pestaña estado
+      onCompleted();
     }
   };
 
@@ -155,7 +155,7 @@ export default function StudentPortal() {
   const { getMySolicitud } = useSolicitudes();
   const mySolicitud = getMySolicitud();
 
-  const [activeTab, setActiveTab] = useState("overview"); // overview | inscripcion | estado
+  const [activeTab, setActiveTab] = useState("overview");
 
   const displayName =
     mySolicitud?.formData?.nombre || "Estudiante Universidad Fidélitas";

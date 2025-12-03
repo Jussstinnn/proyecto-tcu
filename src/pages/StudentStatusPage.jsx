@@ -107,7 +107,7 @@ export default function StudentStatusPage({ solicitud }) {
                 key={step.id}
                 className="flex flex-col items-center flex-1 min-w-0"
               >
-                {/* barra de conexión (opcional, solo desktop) */}
+                {/* barra de conexión (solo desktop */}
                 {index > 0 && (
                   <div className="hidden sm:block w-full h-[2px] bg-slate-200 mb-[-1.1rem] -z-10" />
                 )}

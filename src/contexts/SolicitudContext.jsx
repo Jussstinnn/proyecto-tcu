@@ -2,7 +2,6 @@ import { createContext, useContext, useState } from "react";
 
 const CURRENT_USER = "Justin Montoya";
 
-// Semilla de solicitudes de ejemplo para el dashboard de admin
 const initialSolicitudes = [
   {
     id: "#98765",

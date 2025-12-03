@@ -105,7 +105,6 @@ export default function InstitutionsPage() {
         )
       );
     } else {
-      // nueva institución (se aprueba automáticamente en este mock)
       const newId =
         institutions.length > 0
           ? Math.max(...institutions.map((i) => i.id)) + 1
