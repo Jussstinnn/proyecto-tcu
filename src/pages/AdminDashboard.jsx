@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   LuLayoutDashboard,
   LuCalendar,
@@ -11,7 +11,24 @@ import { useSolicitudes } from "../contexts/SolicitudContext";
 import SolicitudModal from "../components/SolicitudModal";
 
 export default function AdminDashboard() {
-  const { solicitudes, updateSolicitudStatus } = useSolicitudes();
+  const {
+    solicitudes,
+    loading,
+    fetchAllSolicitudes,
+    updateSolicitudStatus,
+    assignReviewer,
+  } = useSolicitudes();
+
+  // Cargar solicitudes al entrar al dashboard
+  useEffect(() => {
+    fetchAllSolicitudes().catch((err) =>
+      console.error("Error cargando solicitudes:", err)
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  console.log("AdminDashboard - total solicitudes:", solicitudes.length);
+  console.log("AdminDashboard - solicitudes:", solicitudes);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSolicitud, setSelectedSolicitud] = useState(null);
@@ -22,6 +39,14 @@ export default function AdminDashboard() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [assignedFilter, setAssignedFilter] = useState("all");
+
+  // Lista de revisores demo (luego se puede cargar de BD)
+  const reviewers = [
+    "admin.revisor@ufidelitas.ac.cr",
+    "coordinacion.tcu@ufidelitas.ac.cr",
+    "revisor1@ufidelitas.ac.cr",
+  ];
 
   const openModal = (solicitud) => {
     setSelectedSolicitud(solicitud);
@@ -33,29 +58,32 @@ export default function AdminDashboard() {
     setIsModalOpen(false);
   };
 
-  const handleApprove = (observation) => {
-    if (selectedSolicitud) {
-      updateSolicitudStatus(selectedSolicitud.id, "Aprobado", observation);
-      closeModal();
-    }
+  const handleApprove = async (observation) => {
+    if (!selectedSolicitud) return;
+    await updateSolicitudStatus(selectedSolicitud.id, "Aprobado", observation);
+    closeModal();
   };
 
-  const handleReject = (observation) => {
-    if (selectedSolicitud) {
-      updateSolicitudStatus(selectedSolicitud.id, "Rechazado", observation);
-      closeModal();
-    }
+  const handleReject = async (observation) => {
+    if (!selectedSolicitud) return;
+    await updateSolicitudStatus(selectedSolicitud.id, "Rechazado", observation);
+    closeModal();
   };
 
-  const handleReturn = (observation) => {
-    if (selectedSolicitud) {
-      updateSolicitudStatus(selectedSolicitud.id, "Observado", observation);
-      closeModal();
-    }
+  const handleReturn = async (observation) => {
+    if (!selectedSolicitud) return;
+    await updateSolicitudStatus(selectedSolicitud.id, "Observado", observation);
+    closeModal();
   };
 
-  const getStatusClass = (status) => {
-    switch (status) {
+  const handleAssign = async (solicitudId, reviewer) => {
+    if (!reviewer) return;
+    await assignReviewer(solicitudId, reviewer);
+  };
+
+  // ====== HELPERS PARA CLASES ======
+  const getStatusClass = (estado) => {
+    switch (estado) {
       case "Enviado":
       case "En Revisión":
       case "Open":
@@ -85,41 +113,65 @@ export default function AdminDashboard() {
     }
   };
 
-  // ====== APLICAR FILTROS ======
+  const getAssignedClass = (assigned_to) => {
+    if (!assigned_to) return "bg-slate-100 text-slate-700";
+    return "bg-purple-100 text-purple-700";
+  };
+
+  // ====== APLICAR FILTROS (usando campos de la BD) ======
   const filteredSolicitudes = solicitudes.filter((s) => {
     const searchText = search.toLowerCase();
 
+    const subjectBase =
+      s.objetivo_general ||
+      s.subj ||
+      "Anteproyecto de Trabajo Comunal Universitario";
+
     const matchesSearch =
       !searchText ||
-      s.id.toLowerCase().includes(searchText) ||
-      s.req.toLowerCase().includes(searchText) ||
-      (s.subj || "").toLowerCase().includes(searchText);
+      (s.codigo_publico || String(s.id)).toLowerCase().includes(searchText) ||
+      (s.estudiante_nombre || "").toLowerCase().includes(searchText) ||
+      subjectBase.toLowerCase().includes(searchText);
 
     const matchesPriority =
-      priorityFilter === "all" || s.prio === priorityFilter;
+      priorityFilter === "all" || s.prioridad === priorityFilter;
 
-    const matchesStatus = statusFilter === "all" || s.status === statusFilter;
+    const matchesStatus = statusFilter === "all" || s.estado === statusFilter;
 
-    // formato de fecha "YYYY-MM-DD"
-    const matchesFromDate = !fromDate || s.due >= fromDate;
-    const matchesToDate = !toDate || s.due <= toDate;
+    const due = s.vencimiento; // DATE 'YYYY-MM-DD'
+    const matchesFromDate = !fromDate || (due && due >= fromDate);
+    const matchesToDate = !toDate || (due && due <= toDate);
+
+    const matchesAssigned =
+      assignedFilter === "all" ||
+      (assignedFilter === "unassigned" && !s.assigned_to) ||
+      (assignedFilter === "assigned" && !!s.assigned_to);
 
     return (
       matchesSearch &&
       matchesPriority &&
       matchesStatus &&
       matchesFromDate &&
-      matchesToDate
+      matchesToDate &&
+      matchesAssigned
     );
   });
 
+  // ====== RESÚMENES (usando estado de la BD) ======
+  const total = solicitudes.length;
+  const pendientes = solicitudes.filter(
+    (s) => s.estado === "Enviado" || s.estado === "Open"
+  ).length;
+  const aprobadas = solicitudes.filter(
+    (s) => s.estado === "Aprobado" || s.estado === "Closed"
+  ).length;
+  const rechazadas = solicitudes.filter((s) => s.estado === "Rechazado").length;
+
   return (
     <>
-      {/* LAYOUT PRINCIPAL */}
       <div className="min-h-screen bg-slate-100 flex">
-        {/* SIDEBAR ADMIN - estilo similar al de estudiantes */}
+        {/* SIDEBAR ADMIN */}
         <aside className="w-64 bg-white border-r border-slate-200 shadow-sm hidden md:flex flex-col">
-          {/* Header sidebar */}
           <div className="h-16 flex items-center px-6 border-b border-slate-200">
             <div className="w-9 h-9 rounded-xl bg-[rgba(2,14,159,1)] flex items-center justify-center text-white font-bold mr-3">
               A
@@ -134,7 +186,6 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* Menú */}
           <nav className="flex-1 p-4 space-y-1 text-sm">
             <SidebarItem icon={LuLayoutDashboard} label="Dashboard" active />
             <SidebarItem icon={LuTicket} label="Solicitudes (Tickets)" />
@@ -169,14 +220,12 @@ export default function AdminDashboard() {
             <div className="flex items-center gap-3">
               <div className="text-right hidden sm:block">
                 <p className="text-xs font-semibold text-slate-700">
-                  Justin Montoya
+                  Eddier Soto Vargas
                 </p>
-                <p className="text-[11px] text-slate-500">
-                  Coordinación TCU (demo)
-                </p>
+                <p className="text-[11px] text-slate-500">Coordinación TCU</p>
               </div>
               <div className="w-9 h-9 rounded-full bg-slate-800 text-white flex items-center justify-center text-xs font-bold">
-                JM
+                ES
               </div>
             </div>
           </header>
@@ -187,34 +236,16 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <SummaryCard
                 title="Total solicitudes"
-                value={solicitudes.length}
+                value={total}
                 color="blue"
               />
               <SummaryCard
                 title="Pendientes"
-                value={
-                  solicitudes.filter(
-                    (s) => s.status === "Enviado" || s.status === "Open"
-                  ).length
-                }
+                value={pendientes}
                 color="yellow"
               />
-              <SummaryCard
-                title="Aprobadas"
-                value={
-                  solicitudes.filter(
-                    (s) => s.status === "Aprobado" || s.status === "Closed"
-                  ).length
-                }
-                color="green"
-              />
-              <SummaryCard
-                title="Rechazadas"
-                value={
-                  solicitudes.filter((s) => s.status === "Rechazado").length
-                }
-                color="red"
-              />
+              <SummaryCard title="Aprobadas" value={aprobadas} color="green" />
+              <SummaryCard title="Rechazadas" value={rechazadas} color="red" />
             </div>
 
             {/* TABLA PRINCIPAL */}
@@ -226,7 +257,8 @@ export default function AdminDashboard() {
                     Solicitudes recibidas
                   </h2>
                   <p className="text-[11px] text-slate-500">
-                    Filtra por estudiante, estado, prioridad o rango de fechas.
+                    Filtra por estudiante, estado, prioridad, revisor o rango de
+                    fechas.
                   </p>
                 </div>
 
@@ -264,6 +296,16 @@ export default function AdminDashboard() {
                     <option value="Rechazado">Rechazado</option>
                   </select>
 
+                  <select
+                    value={assignedFilter}
+                    onChange={(e) => setAssignedFilter(e.target.value)}
+                    className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm w-[160px]"
+                  >
+                    <option value="all">Todos los casos</option>
+                    <option value="unassigned">Sin asignar</option>
+                    <option value="assigned">Asignados</option>
+                  </select>
+
                   <div className="flex items-center gap-2 text-[11px] text-slate-500">
                     <span>Vencimiento:</span>
                     <input
@@ -293,55 +335,108 @@ export default function AdminDashboard() {
                       <th className="p-3 text-left">Asunto</th>
                       <th className="p-3 text-left">Prioridad</th>
                       <th className="p-3 text-left">Estado</th>
+                      <th className="p-3 text-left">Revisor</th>
                       <th className="p-3 text-left">Vencimiento</th>
                       <th className="p-3 text-left">Acción</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredSolicitudes.map((ticket) => (
-                      <tr
-                        key={ticket.id}
-                        className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
-                      >
-                        <td className="p-3 font-medium text-slate-800">
-                          {ticket.id}
-                        </td>
-                        <td className="p-3 text-slate-700">{ticket.req}</td>
-                        <td className="p-3 text-slate-700">{ticket.subj}</td>
-                        <td className="p-3">
-                          <span
-                            className={`px-3 py-1 rounded-full font-medium text-[11px] ${getPriorityClass(
-                              ticket.prio
-                            )}`}
-                          >
-                            {ticket.prio}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span
-                            className={`px-3 py-1 rounded-full font-medium text-[11px] ${getStatusClass(
-                              ticket.status
-                            )}`}
-                          >
-                            {ticket.status}
-                          </span>
-                        </td>
-                        <td className="p-3 text-slate-700">{ticket.due}</td>
-                        <td className="p-3 text-slate-700">
-                          <button
-                            onClick={() => openModal(ticket)}
-                            className="text-[rgba(2,14,159,1)] hover:underline font-semibold text-xs"
-                          >
-                            Ver detalle
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-
-                    {filteredSolicitudes.length === 0 && (
+                    {loading && (
                       <tr>
                         <td
-                          colSpan={7}
+                          colSpan={8}
+                          className="p-6 text-center text-sm text-slate-500"
+                        >
+                          Cargando solicitudes...
+                        </td>
+                      </tr>
+                    )}
+
+                    {!loading &&
+                      filteredSolicitudes.map((ticket) => {
+                        const subjectBase =
+                          ticket.objetivo_general ||
+                          ticket.subj ||
+                          "Anteproyecto de Trabajo Comunal Universitario";
+
+                        return (
+                          <tr
+                            key={ticket.id}
+                            className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
+                          >
+                            <td className="p-3 font-medium text-slate-800">
+                              {ticket.codigo_publico || ticket.id}
+                            </td>
+                            <td className="p-3 text-slate-700">
+                              {ticket.estudiante_nombre}
+                            </td>
+                            <td className="p-3 text-slate-700">
+                              {subjectBase}
+                            </td>
+                            <td className="p-3">
+                              <span
+                                className={`px-3 py-1 rounded-full font-medium text-[11px] ${getPriorityClass(
+                                  ticket.prioridad
+                                )}`}
+                              >
+                                {ticket.prioridad}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <span
+                                className={`px-3 py-1 rounded-full font-medium text-[11px] ${getStatusClass(
+                                  ticket.estado
+                                )}`}
+                              >
+                                {ticket.estado}
+                              </span>
+                            </td>
+                            <td className="p-3 text-slate-700">
+                              <div className="flex flex-col gap-1">
+                                <span
+                                  className={`inline-flex px-2 py-1 rounded-full text-[11px] font-medium ${getAssignedClass(
+                                    ticket.assigned_to
+                                  )}`}
+                                >
+                                  {ticket.assigned_to
+                                    ? ticket.assigned_to
+                                    : "Sin asignar"}
+                                </span>
+                                <select
+                                  value={ticket.assigned_to || ""}
+                                  onChange={(e) =>
+                                    handleAssign(ticket.id, e.target.value)
+                                  }
+                                  className="mt-1 border border-slate-300 rounded-lg px-2 py-1 text-[11px] text-slate-700"
+                                >
+                                  <option value="">Asignar revisor...</option>
+                                  {reviewers.map((rev) => (
+                                    <option key={rev} value={rev}>
+                                      {rev}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </td>
+                            <td className="p-3 text-slate-700">
+                              {ticket.vencimiento}
+                            </td>
+                            <td className="p-3 text-slate-700">
+                              <button
+                                onClick={() => openModal(ticket)}
+                                className="text-[rgba(2,14,159,1)] hover:underline font-semibold text-xs"
+                              >
+                                Ver detalle
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+
+                    {!loading && filteredSolicitudes.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={8}
                           className="p-6 text-center text-sm text-slate-500"
                         >
                           No se encontraron solicitudes con los filtros

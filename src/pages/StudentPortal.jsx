@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   LuLayoutDashboard,
   LuFilePlus2,
@@ -15,7 +15,7 @@ import StudentStatusPage from "./StudentStatusPage";
 
 // Datos iniciales del formulario
 const initialFormData = {
-  nombre: "Justin Montoya",
+  nombre: "Eddier Soto",
   cedula: "1-1234-5678",
   carrera: "",
   institucion: "",
@@ -39,13 +39,20 @@ function StudentWizard({ onCompleted }) {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleNext = () => {
-    if (currentStep < 4) {
+  const handleBack = () => {
+    if (currentStep > 1) {
+      setCurrentStep((prev) => prev - 1);
+    }
+  };
+
+  const handleNext = async () => {
+    // Avanzar pasos 1-3
+    if (currentStep < 3) {
       setCurrentStep((prev) => prev + 1);
       return;
     }
 
-    // Validación mínima
+    // Validación mínima antes de enviar
     if (!formData.objetivoGeneral || !formData.institucion) {
       alert(
         "Por favor, complete al menos la institución y el objetivo general."
@@ -53,17 +60,18 @@ function StudentWizard({ onCompleted }) {
       return;
     }
 
-    addSolicitud(formData);
-    alert("¡Solicitud enviada con éxito!");
+    try {
+      await addSolicitud(formData);
+      alert("¡Solicitud enviada con éxito!");
 
-    if (onCompleted) {
-      onCompleted();
-    }
-  };
-
-  const handleBack = () => {
-    if (currentStep > 1) {
-      setCurrentStep((prev) => prev - 1);
+      if (onCompleted) {
+        onCompleted();
+      }
+    } catch (err) {
+      console.error("Error al enviar solicitud:", err);
+      alert(
+        "Ocurrió un error al enviar tu solicitud. Inténtalo de nuevo en unos minutos."
+      );
     }
   };
 
@@ -71,7 +79,6 @@ function StudentWizard({ onCompleted }) {
     { id: 1, name: "Datos Personales", icon: LuUser },
     { id: 2, name: "Institución", icon: LuBuilding },
     { id: 3, name: "Objetivos y Proyecto", icon: LuTarget },
-    { id: 4, name: "Documentos", icon: LuFileText },
   ];
 
   return (
@@ -124,7 +131,6 @@ function StudentWizard({ onCompleted }) {
         {currentStep === 3 && (
           <Step3_Objetivos formData={formData} handleChange={handleChange} />
         )}
-        {currentStep === 4 && <Step4_Documentos />}
       </div>
 
       {/* Footer del wizard */}
@@ -152,15 +158,20 @@ function StudentWizard({ onCompleted }) {
    =========================== */
 
 export default function StudentPortal() {
-  const { getMySolicitud } = useSolicitudes();
-  const mySolicitud = getMySolicitud();
-
+  const { mySolicitud, fetchMySolicitud } = useSolicitudes();
   const [activeTab, setActiveTab] = useState("overview");
 
+  // Cargar solicitud propia al entrar al portal
+  useEffect(() => {
+    fetchMySolicitud().catch((err) =>
+      console.error("Error cargando mi solicitud:", err)
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const displayName =
-    mySolicitud?.formData?.nombre || "Estudiante Universidad Fidélitas";
-  const displayCareer =
-    mySolicitud?.formData?.carrera || "Ingeniería de Software";
+    mySolicitud?.estudiante_nombre || "Estudiante Universidad Fidélitas";
+  const displayCareer = mySolicitud?.carrera || "Ingeniería de Software";
 
   return (
     <div className="min-h-screen bg-slate-100 flex">
@@ -300,7 +311,7 @@ function SidebarItem({ icon: Icon, label, active, onClick }) {
 }
 
 function OverviewSection({ mySolicitud, goToInscripcion, goToEstado }) {
-  const status = mySolicitud?.status || "Sin anteproyecto";
+  const status = mySolicitud?.estado || "Sin anteproyecto";
 
   let statusClasses = "bg-slate-100 text-slate-600";
   if (status === "Aprobado") statusClasses = "bg-emerald-100 text-emerald-700";
@@ -470,22 +481,23 @@ function Step3_Objetivos({ formData, handleChange }) {
           name="justificacion"
           value={formData.justificacion}
           onChange={handleChange}
-          placeholder="Justificación del proyecto"
-          className="w-full p-2 border rounded-md h-24"
+          placeholder="Descripción del problema"
+          className="w-full p-2 border rounded-md h-20"
+          required
         />
         <textarea
           name="objetivoGeneral"
           value={formData.objetivoGeneral}
           onChange={handleChange}
-          placeholder="Objetivo General"
+          placeholder="Objetivo General 1"
           className="w-full p-2 border rounded-md h-20"
         />
         <textarea
           name="objetivosEspecificos"
           value={formData.objetivosEspecificos}
           onChange={handleChange}
-          placeholder="Objetivos Específicos (uno por línea)"
-          className="w-full p-2 border rounded-md h-24"
+          placeholder="Objetivo específico 1"
+          className="w-full p-2 border rounded-md h-12"
         />
         <div className="p-4 bg-yellow-50 border-l-4 border-yellow-400">
           <p className="font-bold text-yellow-800">Asistente IA (mockup)</p>
@@ -493,34 +505,6 @@ function Step3_Objetivos({ formData, handleChange }) {
             “Tu objetivo general no especifica la comunidad beneficiada. ¿Deseas
             mejorar esta redacción?”
           </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Step4_Documentos() {
-  return (
-    <div>
-      <h3 className="text-lg font-semibold mb-4">
-        Paso 4: Adjuntar Documentos Requeridos
-      </h3>
-      <div className="space-y-4">
-        <div className="p-4 border-2 border-dashed rounded-md text-center">
-          <label className="cursor-pointer">
-            <span className="text-[rgba(2,14,159,1)] font-medium">
-              Adjuntar Constancia de Matrícula (PDF)
-            </span>
-            <input type="file" className="hidden" />
-          </label>
-        </div>
-        <div className="p-4 border-2 border-dashed rounded-md text-center">
-          <label className="cursor-pointer">
-            <span className="text-[rgba(2,14,159,1)] font-medium">
-              Adjuntar Copia de Cédula (PDF o JPG)
-            </span>
-            <input type="file" className="hidden" />
-          </label>
         </div>
       </div>
     </div>

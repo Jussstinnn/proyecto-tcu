@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   LuLayoutDashboard,
   LuTicket,
@@ -8,44 +8,7 @@ import {
   LuSettings,
 } from "react-icons/lu";
 import InstitutionModal from "../components/InstitutionModal";
-
-const initialInstitutions = [
-  {
-    id: 1,
-    name: "Hogar de Ancianos Luz y Vida",
-    contact: "ana@luzvida.org",
-    type: "Cuidado de adulto mayor",
-    status: "Pendiente",
-  },
-  {
-    id: 2,
-    name: "Escuela El Porvenir",
-    contact: "director@porvenir.me.cr",
-    type: "Educación",
-    status: "Aprobada",
-  },
-  {
-    id: 3,
-    name: "Refugio Animal de Cartago",
-    contact: "info@refugiocartago.org",
-    type: "Bienestar animal",
-    status: "Aprobada",
-  },
-  {
-    id: 4,
-    name: "Municipalidad de Curridabat",
-    contact: "proveeduria@curridabat.go.cr",
-    type: "Gubernamental",
-    status: "Rechazada",
-  },
-  {
-    id: 5,
-    name: "Comedor Semillitas",
-    contact: "info@semillitas.org",
-    type: "Ayuda social",
-    status: "Pendiente",
-  },
-];
+import api from "../api/apiClient";
 
 const getStatusClass = (status) => {
   switch (status) {
@@ -61,7 +24,9 @@ const getStatusClass = (status) => {
 };
 
 export default function InstitutionsPage() {
-  const [institutions, setInstitutions] = useState(initialInstitutions);
+  const [institutions, setInstitutions] = useState([]);
+  const [loading, setLoading] = useState(false);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedInstitution, setSelectedInstitution] = useState(null);
 
@@ -69,6 +34,23 @@ export default function InstitutionsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+
+  // Cargar instituciones desde el backend
+  const fetchInstitutions = async () => {
+    setLoading(true);
+    try {
+      const res = await api.get("/instituciones");
+      setInstitutions(res.data); // se espera [{id, nombre, contacto_email, tipo_servicio, estado}, ...]
+    } catch (err) {
+      console.error("Error cargando instituciones:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchInstitutions();
+  }, []);
 
   const openModal = (institution) => {
     setSelectedInstitution(institution);
@@ -80,44 +62,65 @@ export default function InstitutionsPage() {
     setIsModalOpen(false);
   };
 
-  const handleApprove = (id) => {
-    setInstitutions((current) =>
-      current.map((inst) =>
-        inst.id === id ? { ...inst, status: "Aprobada" } : inst
-      )
-    );
-  };
-
-  const handleReject = (id) => {
-    setInstitutions((current) =>
-      current.map((inst) =>
-        inst.id === id ? { ...inst, status: "Rechazada" } : inst
-      )
-    );
-  };
-
-  const handleSave = (formData, id) => {
-    if (id) {
-      // editar
+  const handleApprove = async (id) => {
+    try {
+      const res = await api.patch(`/instituciones/${id}/status`, {
+        estado: "Aprobada",
+      });
+      const updated = res.data;
       setInstitutions((current) =>
-        current.map((inst) =>
-          inst.id === id ? { ...inst, ...formData } : inst
-        )
+        current.map((inst) => (inst.id === updated.id ? updated : inst))
       );
-    } else {
-      const newId =
-        institutions.length > 0
-          ? Math.max(...institutions.map((i) => i.id)) + 1
-          : 1;
-      const newInstitution = {
-        ...formData,
-        id: newId,
-        status: "Aprobada",
-      };
-      setInstitutions((current) => [newInstitution, ...current]);
+    } catch (err) {
+      console.error("Error aprobando institución:", err);
     }
+  };
 
-    closeModal();
+  const handleReject = async (id) => {
+    try {
+      const res = await api.patch(`/instituciones/${id}/status`, {
+        estado: "Rechazada",
+      });
+      const updated = res.data;
+      setInstitutions((current) =>
+        current.map((inst) => (inst.id === updated.id ? updated : inst))
+      );
+    } catch (err) {
+      console.error("Error rechazando institución:", err);
+    }
+  };
+
+  // Guardar desde el modal (crear / editar)
+  const handleSave = async (formData, id) => {
+    try {
+      if (id) {
+        // editar
+        const payload = {
+          nombre: formData.nombre,
+          contacto_email: formData.contacto_email,
+          tipo_servicio: formData.tipo_servicio,
+        };
+        const res = await api.put(`/instituciones/${id}`, payload);
+        const updated = res.data;
+        setInstitutions((current) =>
+          current.map((inst) => (inst.id === updated.id ? updated : inst))
+        );
+      } else {
+        // crear
+        const payload = {
+          nombre: formData.nombre,
+          contacto_email: formData.contacto_email,
+          tipo_servicio: formData.tipo_servicio,
+        };
+        const res = await api.post("/instituciones", payload);
+        const nueva = res.data;
+        setInstitutions((current) => [nueva, ...current]);
+      }
+      closeModal();
+    } catch (err) {
+      console.error("Error guardando institución:", err);
+      alert("No se pudo guardar la institución. Intente de nuevo.");
+    }
   };
 
   // ====== APLICAR FILTROS ======
@@ -126,30 +129,30 @@ export default function InstitutionsPage() {
 
     const matchesSearch =
       !searchText ||
-      inst.name.toLowerCase().includes(searchText) ||
-      inst.contact.toLowerCase().includes(searchText) ||
-      (inst.type || "").toLowerCase().includes(searchText);
+      inst.nombre.toLowerCase().includes(searchText) ||
+      inst.contacto_email.toLowerCase().includes(searchText) ||
+      (inst.tipo_servicio || "").toLowerCase().includes(searchText);
 
     const matchesStatus =
-      statusFilter === "all" || inst.status === statusFilter;
+      statusFilter === "all" || inst.estado === statusFilter;
 
     const matchesType =
       typeFilter === "all" ||
-      inst.type.toLowerCase() === typeFilter.toLowerCase();
+      (inst.tipo_servicio || "").toLowerCase() === typeFilter.toLowerCase();
 
     return matchesSearch && matchesStatus && matchesType;
   });
 
   // tipos únicos para el combo
   const uniqueTypes = Array.from(
-    new Set(institutions.map((i) => i.type).filter(Boolean))
+    new Set(institutions.map((i) => i.tipo_servicio).filter(Boolean))
   );
 
   // ====== RESÚMENES ======
   const total = institutions.length;
-  const approved = institutions.filter((i) => i.status === "Aprobada").length;
-  const pending = institutions.filter((i) => i.status === "Pendiente").length;
-  const rejected = institutions.filter((i) => i.status === "Rechazada").length;
+  const approved = institutions.filter((i) => i.estado === "Aprobada").length;
+  const pending = institutions.filter((i) => i.estado === "Pendiente").length;
+  const rejected = institutions.filter((i) => i.estado === "Rechazada").length;
 
   return (
     <>
@@ -220,7 +223,7 @@ export default function InstitutionsPage() {
 
           {/* CONTENIDO */}
           <main className="flex-1 p-4 md:p-6 overflow-y-auto space-y-6">
-            {/* TARJETAS RESUMEN (como tickets) */}
+            {/* TARJETAS RESUMEN */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <SummaryCard
                 title="Total instituciones"
@@ -293,55 +296,71 @@ export default function InstitutionsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredInstitutions.map((inst) => (
-                      <tr
-                        key={inst.id}
-                        className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
-                      >
-                        <td className="p-3 text-slate-800 font-medium">
-                          {inst.name}
-                        </td>
-                        <td className="p-3 text-slate-700">{inst.contact}</td>
-                        <td className="p-3 text-slate-700">{inst.type}</td>
-                        <td className="p-3 text-sm">
-                          <span
-                            className={`px-3 py-1 rounded-full font-medium text-[11px] ${getStatusClass(
-                              inst.status
-                            )}`}
-                          >
-                            {inst.status}
-                          </span>
-                        </td>
-                        <td className="p-3 text-sm text-slate-700 space-x-3">
-                          {inst.status === "Pendiente" && (
-                            <>
-                              <button
-                                onClick={() => handleApprove(inst.id)}
-                                className="text-emerald-600 hover:text-emerald-800 font-semibold text-xs"
-                              >
-                                Aprobar
-                              </button>
-                              <button
-                                onClick={() => handleReject(inst.id)}
-                                className="text-red-600 hover:text-red-800 font-semibold text-xs"
-                              >
-                                Rechazar
-                              </button>
-                            </>
-                          )}
-                          {inst.status !== "Pendiente" && (
-                            <button
-                              onClick={() => openModal(inst)}
-                              className="text-[rgba(2,14,159,1)] hover:underline font-semibold text-xs"
-                            >
-                              Ver / editar
-                            </button>
-                          )}
+                    {loading && (
+                      <tr>
+                        <td
+                          colSpan={5}
+                          className="p-6 text-center text-sm text-slate-500"
+                        >
+                          Cargando instituciones...
                         </td>
                       </tr>
-                    ))}
+                    )}
 
-                    {filteredInstitutions.length === 0 && (
+                    {!loading &&
+                      filteredInstitutions.map((inst) => (
+                        <tr
+                          key={inst.id}
+                          className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
+                        >
+                          <td className="p-3 text-slate-800 font-medium">
+                            {inst.nombre}
+                          </td>
+                          <td className="p-3 text-slate-700">
+                            {inst.contacto_email}
+                          </td>
+                          <td className="p-3 text-slate-700">
+                            {inst.tipo_servicio}
+                          </td>
+                          <td className="p-3 text-sm">
+                            <span
+                              className={`px-3 py-1 rounded-full font-medium text-[11px] ${getStatusClass(
+                                inst.estado
+                              )}`}
+                            >
+                              {inst.estado}
+                            </span>
+                          </td>
+                          <td className="p-3 text-sm text-slate-700 space-x-3">
+                            {inst.estado === "Pendiente" && (
+                              <>
+                                <button
+                                  onClick={() => handleApprove(inst.id)}
+                                  className="text-emerald-600 hover:text-emerald-800 font-semibold text-xs"
+                                >
+                                  Aprobar
+                                </button>
+                                <button
+                                  onClick={() => handleReject(inst.id)}
+                                  className="text-red-600 hover:text-red-800 font-semibold text-xs"
+                                >
+                                  Rechazar
+                                </button>
+                              </>
+                            )}
+                            {inst.estado !== "Pendiente" && (
+                              <button
+                                onClick={() => openModal(inst)}
+                                className="text-[rgba(2,14,159,1)] hover:underline font-semibold text-xs"
+                              >
+                                Ver / editar
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+
+                    {!loading && filteredInstitutions.length === 0 && (
                       <tr>
                         <td
                           colSpan={5}

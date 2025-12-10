@@ -16,11 +16,20 @@ export default function InstitutionModal({
   useEffect(() => {
     if (!isOpen) return;
 
-    const data = institutionData || { name: "", contact: "", type: "" };
+    // Soportar tanto {name, contact, type} como {nombre, contacto_email, tipo_servicio}
+    const data = institutionData || {
+      name: "",
+      contact: "",
+      type: "",
+    };
 
-    setName(data.name || "");
-    setContact(data.contact || "");
-    setType(data.type || "");
+    const nombre = data.name || data.nombre || "";
+    const contacto = data.contact || data.contacto_email || "";
+    const tipo = data.type || data.tipo_servicio || "";
+
+    setName(nombre);
+    setContact(contacto);
+    setType(tipo);
   }, [isOpen, institutionData]);
 
   const handleSubmit = (e) => {
@@ -31,8 +40,18 @@ export default function InstitutionModal({
       return;
     }
 
+    // Enviamos ambos formatos para compatibilidad
     onSave(
-      { name, contact, type },
+      {
+        // formato legacy
+        name,
+        contact,
+        type,
+        // formato backend
+        nombre: name,
+        contacto_email: contact,
+        tipo_servicio: type,
+      },
       institutionData ? institutionData.id : null
     );
   };
@@ -126,9 +145,9 @@ export default function InstitutionModal({
 
           {/* NOTA INFORMATIVA */}
           <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-xs text-slate-600">
-            Recordá que solo se aprueban instituciones **sin fines de lucro** y
-            con alineación al reglamento del TCU (ONGs, municipalidades, centros
-            educativos, fundaciones, etc.).
+            Recordá que solo se aprueban instituciones <b>sin fines de lucro</b>{" "}
+            y con alineación al reglamento del TCU (ONGs, municipalidades,
+            centros educativos, fundaciones, etc.).
           </div>
         </form>
 

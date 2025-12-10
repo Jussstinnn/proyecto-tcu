@@ -18,14 +18,38 @@ export default function SolicitudModal({
 
   if (!isOpen || !solicitudData) return null;
 
-  const { formData, status, id } = solicitudData;
+  // ==== Soportar estructura legacy + backend ====
+  const legacyForm = solicitudData.formData || {};
 
+  const status = solicitudData.status || solicitudData.estado || "Enviado";
+
+  const idPublico = solicitudData.codigo_publico || solicitudData.id;
+
+  const nombre = legacyForm.nombre || solicitudData.estudiante_nombre || "";
+  const cedula = legacyForm.cedula || solicitudData.cedula || "";
+  const carrera = legacyForm.carrera || solicitudData.carrera || "";
+
+  const institucion =
+    legacyForm.institucion || solicitudData.institucion_nombre || "";
+
+  const justificacion =
+    legacyForm.justificacion || solicitudData.justificacion || "";
+
+  const objetivoGeneral =
+    legacyForm.objetivoGeneral || solicitudData.objetivo_general || "";
+
+  const objetivosEspecificos =
+    legacyForm.objetivosEspecificos ||
+    solicitudData.objetivos_especificos ||
+    "";
+
+  // ==== lógica de acciones ====
   const handleReturn = () => {
     if (!observation.trim()) {
       alert("Por favor, escriba una observación para devolver la solicitud.");
       return;
     }
-    onReturn(observation);
+    onReturn(observation.trim());
   };
 
   const handleApprove = () => {
@@ -37,7 +61,7 @@ export default function SolicitudModal({
       alert("Por favor, justifique el rechazo en las observaciones.");
       return;
     }
-    onReject(observation);
+    onReject(observation.trim());
   };
 
   const isEditableStatus =
@@ -56,17 +80,17 @@ export default function SolicitudModal({
           : "bg-blue-100 text-blue-700";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      {/* CARD PRINCIPAL) */}
-      <div className="relative w-full max-w-4xl max-h-[85vh] bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 md:p-4">
+      {/* CARD PRINCIPAL MÁS GRANDE */}
+      <div className="relative w-full max-w-6xl max-h-[90vh] bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
         {/* HEADER */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
+        <div className="flex items-center justify-between px-7 py-5 border-b border-slate-200 bg-slate-50">
           <div>
             <p className="text-xs uppercase tracking-wide text-slate-500">
               Revisión de anteproyecto
             </p>
-            <h3 className="text-lg font-semibold text-slate-900">
-              Solicitud {id}
+            <h3 className="text-xl font-semibold text-slate-900">
+              Solicitud {idPublico}
             </h3>
           </div>
           <div className="flex items-center gap-3">
@@ -84,59 +108,58 @@ export default function SolicitudModal({
           </div>
         </div>
 
-        {/* CONTENIDO SCROLLEABLE */}
-        <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
+        {/* CONTENIDO SCROLLEABLE MÁS ALTO */}
+        <div className="px-7 py-5 space-y-5 max-h-[70vh] overflow-y-auto">
           {/* Datos estudiante */}
           <section>
-            <h4 className="text-sm font-semibold text-slate-900 mb-2">
+            <h4 className="text-sm font-semibold text-slate-900 mb-3">
               Datos del estudiante
             </h4>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs md:text-sm text-slate-700">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs md:text-sm text-slate-700">
               <div>
                 <span className="font-semibold">Nombre: </span>
-                {formData.nombre}
+                {nombre || "—"}
               </div>
               <div>
                 <span className="font-semibold">Cédula: </span>
-                {formData.cedula}
+                {cedula || "—"}
               </div>
               <div>
                 <span className="font-semibold">Carrera: </span>
-                {formData.carrera}
+                {carrera || "—"}
               </div>
             </div>
           </section>
 
           {/* Detalles del proyecto */}
-          <section className="pt-2">
-            <h4 className="text-sm font-semibold text-slate-900 mb-2">
+          <section className="pt-1">
+            <h4 className="text-sm font-semibold text-slate-900 mb-3">
               Detalles del proyecto
             </h4>
-            <div className="space-y-3 text-xs md:text-sm text-slate-700">
+            <div className="space-y-4 text-xs md:text-sm text-slate-700">
               <div>
                 <span className="font-semibold">Institución: </span>
-                {formData.institucion}
+                {institucion || "—"}
               </div>
 
               <div>
                 <p className="font-semibold mb-1">Justificación</p>
                 <p className="px-3 py-2 bg-slate-50 rounded-xl border border-slate-200">
-                  {formData.justificacion || "Sin justificación registrada."}
+                  {justificacion || "Sin justificación registrada."}
                 </p>
               </div>
 
               <div>
                 <p className="font-semibold mb-1">Objetivo general</p>
                 <p className="px-3 py-2 bg-slate-50 rounded-xl border border-slate-200">
-                  {formData.objetivoGeneral ||
-                    "Sin objetivo general registrado."}
+                  {objetivoGeneral || "Sin objetivo general registrado."}
                 </p>
               </div>
 
               <div>
                 <p className="font-semibold mb-1">Objetivos específicos</p>
                 <pre className="px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 font-sans whitespace-pre-wrap">
-                  {formData.objetivosEspecificos ||
+                  {objetivosEspecificos ||
                     "Sin objetivos específicos registrados."}
                 </pre>
               </div>
@@ -144,7 +167,7 @@ export default function SolicitudModal({
           </section>
 
           {/* Observaciones */}
-          <section className="pt-2">
+          <section className="pt-1">
             <h4 className="text-sm font-semibold text-slate-900 mb-2">
               Observaciones del revisor
             </h4>
@@ -152,7 +175,7 @@ export default function SolicitudModal({
               value={observation}
               onChange={(e) => setObservation(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-[rgba(2,14,159,1)] focus:border-[rgba(2,14,159,1)]"
-              rows={3}
+              rows={4}
               placeholder="Escribir observaciones para el estudiante..."
               readOnly={!isEditableStatus}
             />
@@ -166,7 +189,7 @@ export default function SolicitudModal({
         </div>
 
         {/* FOOTER ACCIONES */}
-        <div className="flex justify-between items-center px-6 py-4 border-t border-slate-200 bg-slate-50">
+        <div className="flex justify-between items-center px-7 py-4 border-t border-slate-200 bg-slate-50">
           <button
             onClick={onClose}
             className="px-4 py-2 text-xs md:text-sm font-medium text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200"
