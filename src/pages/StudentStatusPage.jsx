@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   LuCheck,
   LuFileText,
@@ -32,12 +33,15 @@ const getActiveStepIndex = (status) => {
 };
 
 export default function StudentStatusPage({ solicitud }) {
-  const status = solicitud.estado;
+  const status = solicitud.status;
   const activeStep = getActiveStepIndex(status);
 
-  const nombre = solicitud.estudiante_nombre;
-  const carrera = solicitud.carrera;
-  const institucion = solicitud.institucion_nombre;
+  // Datos del formulario normalizados desde el contexto
+  const { nombre, carrera, institucion, tituloProyecto, objetivoGeneral } =
+    solicitud.formData || {};
+
+  const assignedTo = solicitud.assigned_to;
+  const due = solicitud.due;
 
   const statusColor =
     status === "Aprobado"
@@ -48,9 +52,19 @@ export default function StudentStatusPage({ solicitud }) {
           ? "bg-amber-100 text-amber-700"
           : "bg-blue-100 text-blue-700";
 
-  // History debe venir del backend como array
-  // con campos: fecha, accion, usuario, mensaje
+  // history ya viene normalizado desde el contexto
   const history = (solicitud.history || []).slice().reverse();
+
+  // Código “tipo código de barras” de 6 caracteres, estable mientras se ve la página
+  const approvalCode = useMemo(() => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // sin 0/1 para evitar confusiones
+    let code = "";
+    for (let i = 0; i < 6; i++) {
+      const idx = Math.floor(Math.random() * chars.length);
+      code += chars[idx];
+    }
+    return code;
+  }, [solicitud.id, status]);
 
   return (
     <div className="bg-white rounded-3x1 shadow-2xl border border-slate-200 overflow-hidden">
@@ -64,7 +78,7 @@ export default function StudentStatusPage({ solicitud }) {
             <h1 className="text-xl md:text-2xl font-bold text-slate-900">
               Estado de tu solicitud
               <span className="text-sm font-semibold text-slate-500 ml-2">
-                #{solicitud.codigo_publico || solicitud.id}
+                #{solicitud.id}
               </span>
             </h1>
 
@@ -83,6 +97,21 @@ export default function StudentStatusPage({ solicitud }) {
               {institucion && (
                 <span className="px-2 py-1 rounded-full bg-slate-100">
                   🏢 {institucion}
+                </span>
+              )}
+              {assignedTo && (
+                <span className="px-2 py-1 rounded-full bg-slate-100">
+                  🧑‍🏫 Revisor: {assignedTo}
+                </span>
+              )}
+              {due && (
+                <span className="px-2 py-1 rounded-full bg-slate-100">
+                  ⏰ Vencimiento:{" "}
+                  {new Date(due).toLocaleDateString("es-CR", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                  })}
                 </span>
               )}
             </div>
@@ -172,6 +201,70 @@ export default function StudentStatusPage({ solicitud }) {
         )}
       </div>
 
+      {/* “DOCUMENTO” DE APROBACIÓN (solo cuando está Aprobado) */}
+      {status === "Aprobado" && (
+        <div className="px-6 md:px-8 pt-4">
+          <div className="bg-white border border-emerald-200 rounded-2xl shadow-sm p-4 md:p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">
+                Comprobante de aprobación
+              </p>
+              <h2 className="text-sm md:text-base font-bold text-slate-900 mt-1">
+                Trabajo Comunal Universitario – Aprobado
+              </h2>
+
+              <div className="mt-2 text-xs text-slate-700 space-y-1">
+                <p>
+                  <span className="font-semibold">Estudiante:</span>{" "}
+                  {nombre || "—"}
+                </p>
+                <p>
+                  <span className="font-semibold">Título del proyecto:</span>{" "}
+                  {tituloProyecto || "Sin título registrado"}
+                </p>
+                <p>
+                  <span className="font-semibold">Objetivo general:</span>{" "}
+                  {objetivoGeneral || "Sin objetivo registrado"}
+                </p>
+                <p className="mt-1">
+                  <span className="font-semibold text-emerald-700">
+                    Estado:
+                  </span>{" "}
+                  Aprobado por la coordinación de TCU.
+                </p>
+              </div>
+
+              <div className="mt-3">
+                <p className="text-[11px] uppercase font-semibold text-slate-500">
+                  Código de aprobación
+                </p>
+                <p className="mt-1 inline-block font-mono text-lg tracking-[0.35em] bg-slate-900 text-white px-3 py-2 rounded-lg">
+                  {approvalCode}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex md:flex-col items-end md:items-center gap-3">
+              {/* Botón solo visual, sin funcionalidad */}
+              <button
+                type="button"
+                className="px-4 py-2 text-xs md:text-sm font-semibold rounded-xl bg-[rgba(2,14,159,1)] text-white shadow-sm hover:bg-indigo-900"
+              >
+                Descargar documento
+              </button>
+              <p
+                className="text-[10px] text-gray-800 font-semibold max-w-[220px] 
+               text-right md:text-center border border-[#ffd600] 
+               rounded-lg p-2"
+              >
+                Este documento, debe ser subido al sistema universitario para
+                continuar con el proceso.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* BODY: HISTORIAL / BITÁCORA */}
       <div className="p-6 md:p-8">
         <h3 className="text-lg font-semibold text-slate-900 mb-2">
@@ -202,9 +295,10 @@ export default function StudentStatusPage({ solicitud }) {
             </thead>
             <tbody>
               {history.map((entry, index) => {
-                const fecha = entry.fecha || entry.date;
-                const usuario = entry.usuario || entry.user;
-                const mensaje = entry.mensaje || entry.message;
+                const fecha = entry.date || entry.fecha;
+                const accion = entry.action || entry.accion;
+                const usuario = entry.user || entry.usuario;
+                const mensaje = entry.message || entry.mensaje;
 
                 return (
                   <tr
@@ -215,7 +309,7 @@ export default function StudentStatusPage({ solicitud }) {
                       {fecha ? new Date(fecha).toLocaleString("es-CR") : "-"}
                     </td>
                     <td className="p-3 text-slate-800 font-medium align-top">
-                      {entry.accion || entry.action}
+                      {accion}
                     </td>
                     <td className="p-3 text-slate-700 align-top">
                       {usuario || "-"}

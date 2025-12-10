@@ -11,7 +11,7 @@ function generateCodigo() {
  * Estudiante: obtener MIS solicitudes
  * DEMO:
  *   - Si viene ?email=... se usa ese correo.
- *   - Si no, se usa uno por defecto (eddier@ufidelitas.ac.cr).
+ *   - Si no, se usa uno por defecto (esoto@ufidelitas.ac.cr).
  *
  * Producción:
  *   - Cuando tengas auth real, puedes usar owner_user_id = req.user.id
@@ -20,7 +20,7 @@ function generateCodigo() {
 async function getMySolicitudes(req, res) {
   try {
     const emailParam = req.query.email;
-    const ownerEmail = emailParam || "eddier@ufidelitas.ac.cr";
+    const ownerEmail = emailParam || "esoto@ufidelitas.ac.cr";
 
     const [rows] = await pool.query(
       `SELECT *
@@ -83,15 +83,17 @@ async function createSolicitud(req, res) {
     carrera,
     institucion_id,
     institucion_nombre,
+    titulo_proyecto,
     justificacion,
     objetivo_general,
     objetivos_especificos,
+    beneficiario,
+    estrategia_solucion, // ✔ nombre correcto
     prioridad,
     vencimiento,
     owner_email: ownerEmailBody,
   } = req.body;
 
-  // Validaciones mínimas
   if (
     !institucion_nombre ||
     !justificacion ||
@@ -104,18 +106,11 @@ async function createSolicitud(req, res) {
     });
   }
 
-  // Si más adelante activas auth real:
-  // const ownerUserId = req.user?.id ?? 1;
-  // const ownerEmail = req.user?.email ?? (ownerEmailBody || "eddier@ufidelitas.ac.cr");
-
-  // MODO DEMO: aún sin auth, así que seteamos valores por defecto
-  const ownerUserId = 1; // <-- asegúrate de que exista un usuario con id=1 o quita FK
-  const ownerEmail = ownerEmailBody || "eddier@ufidelitas.ac.cr"; // correo "dueño" de la solicitud
-
+  const ownerUserId = 1;
+  const ownerEmail = ownerEmailBody || "esoto@ufidelitas.ac.cr";
   const codigo_publico = generateCodigo();
 
   try {
-    // Insertar en solicitudes usando tu esquema
     const [result] = await pool.query(
       `INSERT INTO solicitudes (
          codigo_publico,
@@ -124,9 +119,12 @@ async function createSolicitud(req, res) {
          carrera,
          institucion_id,
          institucion_nombre,
+         titulo_proyecto,
          justificacion,
          objetivo_general,
          objetivos_especificos,
+         beneficiario,
+         estrategia_solucion,
          prioridad,
          estado,
          vencimiento,
@@ -135,7 +133,7 @@ async function createSolicitud(req, res) {
          assigned_to,
          assign_date
        )
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
       [
         codigo_publico,
         estudiante_nombre,
@@ -143,20 +141,23 @@ async function createSolicitud(req, res) {
         carrera || "",
         institucion_id || null,
         institucion_nombre,
+        titulo_proyecto, // ✔ ahora sí se inserta
         justificacion,
         objetivo_general,
-        objetivos_especificos || null,
+        objetivos_especificos || "",
+        beneficiario || "", // ✔ se inserta bien
+        estrategia_solucion || "", // ✔ sin error de typo
         prioridad || "Medium",
         "Enviado",
         vencimiento,
         ownerUserId,
         ownerEmail,
+        null,
       ]
     );
 
     const solicitudId = result.insertId;
 
-    // Historial inicial
     await pool.query(
       `INSERT INTO solicitud_history (solicitud_id, accion, usuario, mensaje)
        VALUES (?,?,?,?)`,

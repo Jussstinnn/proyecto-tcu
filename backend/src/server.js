@@ -5,6 +5,7 @@ const cors = require("cors");
 const authRoutes = require("./routes/auth.routes");
 const solicitudRoutes = require("./routes/solicitud.routes");
 const institucionRoutes = require("./routes/instituciones.routes");
+const userRoutes = require("./routes/user.routes");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -27,6 +28,7 @@ app.get("/", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/solicitudes", solicitudRoutes);
 app.use("/api/instituciones", institucionRoutes);
+app.use("/api/user", userRoutes);
 
 // Middleware de errores (catch-all)
 app.use((err, req, res, next) => {

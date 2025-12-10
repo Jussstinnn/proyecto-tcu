@@ -1,3 +1,4 @@
+// src/pages/InstitutionsPage.jsx
 import { useEffect, useState } from "react";
 import {
   LuLayoutDashboard,
@@ -23,6 +24,19 @@ const getStatusClass = (status) => {
   }
 };
 
+// 🔄 Normaliza lo que venga del backend
+function mapInstitutionFromApi(apiInst) {
+  if (!apiInst) return null;
+
+  return {
+    id: apiInst.id,
+    nombre: apiInst.nombre || apiInst.name || "",
+    contacto_email: apiInst.contacto_email || apiInst.contact || "",
+    tipo_servicio: apiInst.tipo_servicio || apiInst.type || "",
+    estado: apiInst.estado || "Pendiente",
+  };
+}
+
 export default function InstitutionsPage() {
   const [institutions, setInstitutions] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -40,7 +54,9 @@ export default function InstitutionsPage() {
     setLoading(true);
     try {
       const res = await api.get("/instituciones");
-      setInstitutions(res.data); // se espera [{id, nombre, contacto_email, tipo_servicio, estado}, ...]
+      const listApi = Array.isArray(res.data) ? res.data : [];
+      const listUi = listApi.map(mapInstitutionFromApi);
+      setInstitutions(listUi);
     } catch (err) {
       console.error("Error cargando instituciones:", err);
     } finally {
@@ -67,7 +83,7 @@ export default function InstitutionsPage() {
       const res = await api.patch(`/instituciones/${id}/status`, {
         estado: "Aprobada",
       });
-      const updated = res.data;
+      const updated = mapInstitutionFromApi(res.data);
       setInstitutions((current) =>
         current.map((inst) => (inst.id === updated.id ? updated : inst))
       );
@@ -81,7 +97,7 @@ export default function InstitutionsPage() {
       const res = await api.patch(`/instituciones/${id}/status`, {
         estado: "Rechazada",
       });
-      const updated = res.data;
+      const updated = mapInstitutionFromApi(res.data);
       setInstitutions((current) =>
         current.map((inst) => (inst.id === updated.id ? updated : inst))
       );
@@ -101,19 +117,20 @@ export default function InstitutionsPage() {
           tipo_servicio: formData.tipo_servicio,
         };
         const res = await api.put(`/instituciones/${id}`, payload);
-        const updated = res.data;
+        const updated = mapInstitutionFromApi(res.data);
         setInstitutions((current) =>
           current.map((inst) => (inst.id === updated.id ? updated : inst))
         );
       } else {
-        // crear
+        // crear (la dejamos aprobada de una vez)
         const payload = {
           nombre: formData.nombre,
           contacto_email: formData.contacto_email,
           tipo_servicio: formData.tipo_servicio,
+          estado: "Aprobada",
         };
         const res = await api.post("/instituciones", payload);
-        const nueva = res.data;
+        const nueva = mapInstitutionFromApi(res.data);
         setInstitutions((current) => [nueva, ...current]);
       }
       closeModal();

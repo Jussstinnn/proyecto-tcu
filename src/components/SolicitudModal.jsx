@@ -11,22 +11,19 @@ export default function SolicitudModal({
 }) {
   const [observation, setObservation] = useState("");
 
-  // Limpiar textarea cada vez que se abre con una solicitud nueva
   useEffect(() => {
     if (isOpen) setObservation("");
   }, [isOpen, solicitudData]);
 
   if (!isOpen || !solicitudData) return null;
 
-  // ==== Soportar estructura legacy + backend ====
   const legacyForm = solicitudData.formData || {};
 
   const status = solicitudData.status || solicitudData.estado || "Enviado";
-
   const idPublico = solicitudData.codigo_publico || solicitudData.id;
 
   const nombre = legacyForm.nombre || solicitudData.estudiante_nombre || "";
-  const cedula = legacyForm.cedula || solicitudData.cedula || "";
+  const cedula = legacyForm.cedula || solicitudData.estudiante_cedula || "";
   const carrera = legacyForm.carrera || solicitudData.carrera || "";
 
   const institucion =
@@ -43,8 +40,25 @@ export default function SolicitudModal({
     solicitudData.objetivos_especificos ||
     "";
 
-  // ==== lógica de acciones ====
-  const handleReturn = () => {
+  const tituloProyecto =
+    legacyForm.tituloProyecto ||
+    solicitudData.tituloProyecto ||
+    solicitudData.titulo_proyecto ||
+    "";
+
+  const beneficiarios =
+    legacyForm.beneficiarios ||
+    solicitudData.beneficiario ||
+    solicitudData.beneficiarios ||
+    "";
+
+  const estrategiaSolucion =
+    legacyForm.estrategiaSolucion ||
+    solicitudData.estrategiaSolucion ||
+    solicitudData.estrategia_solucion ||
+    "";
+
+  const handleReturnClick = () => {
     if (!observation.trim()) {
       alert("Por favor, escriba una observación para devolver la solicitud.");
       return;
@@ -52,11 +66,11 @@ export default function SolicitudModal({
     onReturn(observation.trim());
   };
 
-  const handleApprove = () => {
+  const handleApproveClick = () => {
     onApprove(observation.trim() || "Aprobado sin comentarios.");
   };
 
-  const handleReject = () => {
+  const handleRejectClick = () => {
     if (!observation.trim()) {
       alert("Por favor, justifique el rechazo en las observaciones.");
       return;
@@ -81,7 +95,6 @@ export default function SolicitudModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 md:p-4">
-      {/* CARD PRINCIPAL MÁS GRANDE */}
       <div className="relative w-full max-w-6xl max-h-[90vh] bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
         {/* HEADER */}
         <div className="flex items-center justify-between px-7 py-5 border-b border-slate-200 bg-slate-50">
@@ -108,7 +121,7 @@ export default function SolicitudModal({
           </div>
         </div>
 
-        {/* CONTENIDO SCROLLEABLE MÁS ALTO */}
+        {/* BODY */}
         <div className="px-7 py-5 space-y-5 max-h-[70vh] overflow-y-auto">
           {/* Datos estudiante */}
           <section>
@@ -143,7 +156,16 @@ export default function SolicitudModal({
               </div>
 
               <div>
-                <p className="font-semibold mb-1">Justificación</p>
+                <p className="font-semibold mb-1">Título del proyecto</p>
+                <p className="px-3 py-2 bg-slate-50 rounded-xl border border-slate-200">
+                  {tituloProyecto || "Sin título registrado."}
+                </p>
+              </div>
+
+              <div>
+                <p className="font-semibold mb-1">
+                  Descripción del problema / Justificación
+                </p>
                 <p className="px-3 py-2 bg-slate-50 rounded-xl border border-slate-200">
                   {justificacion || "Sin justificación registrada."}
                 </p>
@@ -162,6 +184,25 @@ export default function SolicitudModal({
                   {objetivosEspecificos ||
                     "Sin objetivos específicos registrados."}
                 </pre>
+              </div>
+
+              <div>
+                <p className="font-semibold mb-1">
+                  ¿A quién se beneficiará el proyecto?
+                </p>
+                <p className="px-3 py-2 bg-slate-50 rounded-xl border border-slate-200">
+                  {beneficiarios || "Sin beneficiarios registrados."}
+                </p>
+              </div>
+
+              <div>
+                <p className="font-semibold mb-1">
+                  Estrategia y pertinencia de solución
+                </p>
+                <p className="px-3 py-2 bg-slate-50 rounded-xl border border-slate-200">
+                  {estrategiaSolucion ||
+                    "Sin estrategia de solución registrada."}
+                </p>
               </div>
             </div>
           </section>
@@ -188,7 +229,7 @@ export default function SolicitudModal({
           </section>
         </div>
 
-        {/* FOOTER ACCIONES */}
+        {/* FOOTER */}
         <div className="flex justify-between items-center px-7 py-4 border-t border-slate-200 bg-slate-50">
           <button
             onClick={onClose}
@@ -200,19 +241,19 @@ export default function SolicitudModal({
           {isEditableStatus && (
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={handleReturn}
+                onClick={handleReturnClick}
                 className="px-4 py-2 text-xs md:text-sm font-semibold text-amber-800 bg-amber-100 rounded-xl hover:bg-amber-200"
               >
                 Devolver con observaciones
               </button>
               <button
-                onClick={handleReject}
+                onClick={handleRejectClick}
                 className="px-4 py-2 text-xs md:text-sm font-semibold text-red-800 bg-red-100 rounded-xl hover:bg-red-200"
               >
                 Rechazar
               </button>
               <button
-                onClick={handleApprove}
+                onClick={handleApproveClick}
                 className="px-4 py-2 text-xs md:text-sm font-semibold text-white rounded-xl shadow-sm bg-emerald-600 hover:bg-emerald-700"
               >
                 Aprobar

@@ -3,16 +3,20 @@ const router = express.Router();
 const {
   getAllInstituciones,
   createInstitucion,
+  createInstitucionPublic,
   updateInstitucion,
   updateInstitucionStatus,
 } = require("../controllers/instituciones.controller");
 
 const { authRequired, adminOnly } = require("../middleware/auth.middleware");
 
-// Todos los usuarios logueados pueden ver instituciones
-router.get("/", authRequired, getAllInstituciones);
+// GET público (estudiantes pueden ver la lista)
+router.get("/", getAllInstituciones);
 
-// Solo ADMIN puede crear/editar
+// Estudiante registra institución para aprobación
+router.post("/solicitar", createInstitucionPublic);
+
+// Solo ADMIN puede crear/editar directamente y cambiar estado
 router.post("/", authRequired, adminOnly, createInstitucion);
 router.put("/:id", authRequired, adminOnly, updateInstitucion);
 router.patch("/:id/status", authRequired, adminOnly, updateInstitucionStatus);

@@ -16,40 +16,68 @@ function mapSolicitudFromApi(apiS) {
   }));
 
   const objetivoGeneral = apiS.objetivo_general || "";
+  const tituloProyecto = apiS.titulo_proyecto || "";
+  const beneficiario = apiS.beneficiario || "";
+  const estrategiaSolucion = apiS.estrategia_solucion || "";
+
   const subjectBase =
-    objetivoGeneral.trim().length > 0
-      ? objetivoGeneral.trim()
-      : "Anteproyecto TCU";
+    (tituloProyecto && tituloProyecto.trim()) ||
+    (objetivoGeneral && objetivoGeneral.trim()) ||
+    "Anteproyecto TCU";
 
   return {
-    id: apiS.codigo_publico || `#${apiS.id}`, // código visible
+    id: apiS.id,
+    codigo_publico: apiS.codigo_publico,
     status: apiS.estado || "Enviado",
+    estado: apiS.estado || "Enviado",
     prio:
       apiS.prioridad === "High" ||
       apiS.prioridad === "Medium" ||
       apiS.prioridad === "Low"
         ? apiS.prioridad
         : "Medium",
+    prioridad: apiS.prioridad || "Medium",
     due: apiS.vencimiento || null,
+    vencimiento: apiS.vencimiento || null,
     owner: apiS.owner_email || "",
+    owner_email: apiS.owner_email || "",
     assigned_to: apiS.assigned_to || null,
     assign_date: apiS.assign_date || null,
 
+    // datos estudiante
+    estudiante_nombre: apiS.estudiante_nombre || "",
+    estudiante_cedula: apiS.estudiante_cedula || "",
+    carrera: apiS.carrera || "",
+
+    institucion_id: apiS.institucion_id || null,
+    institucion_nombre: apiS.institucion_nombre || "",
+
+    tituloProyecto,
+    beneficiario,
+    estrategiaSolucion,
+    objetivoGeneral,
+    objetivosEspecificos: apiS.objetivos_especificos || "",
+    justificacion: apiS.justificacion || "",
+
     req: apiS.estudiante_nombre || "",
-    subj: apiS.subj || `Revisión: ${subjectBase.slice(0, 30)}...`,
+    subj: `${subjectBase.slice(0, 30)}...`,
 
     formData: {
       nombre: apiS.estudiante_nombre || "",
       cedula: apiS.estudiante_cedula || "",
       carrera: apiS.carrera || "",
+      institucion_id: apiS.institucion_id || null,
       institucion: apiS.institucion_nombre || "",
       justificacion: apiS.justificacion || "",
       objetivoGeneral,
       objetivosEspecificos: apiS.objetivos_especificos || "",
+      tituloProyecto,
+      beneficiarios: beneficiario,
+      estrategiaSolucion,
     },
 
     history,
-    _raw: apiS, // para tener el id interno si luego lo ocupamos
+    _raw: apiS,
   };
 }
 
@@ -75,20 +103,18 @@ export function SolicitudProvider({ children }) {
     }
   };
 
-  // ============================
-  //   STUDENT: obtener la propia
-  //   GET /api/solicitudes/me
-  // ============================
-  const fetchMySolicitud = async () => {
+  // ESTUDIANTE – mis solicitudes (tomamos la más reciente)
+  const fetchMySolicitud = async (emailDemo = "esoto@ufidelitas.ac.cr") => {
     setLoading(true);
     try {
-      const res = await api.get("/solicitudes/me"); // 👈 OJO: /me
-      const apiSolicitud = res.data && res.data[0] ? res.data[0] : null; // devuelve array
-      const uiSolicitud = apiSolicitud
-        ? mapSolicitudFromApi(apiSolicitud)
-        : null;
-      setMySolicitud(uiSolicitud);
-      return uiSolicitud;
+      const res = await api.get(`/solicitudes/me`, {
+        params: { email: emailDemo },
+      });
+      const listApi = Array.isArray(res.data) ? res.data : [];
+      const last = listApi[0] || null;
+      const ui = last ? mapSolicitudFromApi(last) : null;
+      setMySolicitud(ui);
+      return ui;
     } catch (err) {
       console.error("Error cargando mi solicitud:", err);
       throw err;
@@ -97,14 +123,10 @@ export function SolicitudProvider({ children }) {
     }
   };
 
-  // ======================================================
-  //   STUDENT: crear solicitud
-  //   POST /api/solicitudes
-  // ======================================================
+  // ESTUDIANTE – crear solicitud
   const addSolicitud = async (formData) => {
     setLoading(true);
     try {
-      // vencimiento por defecto: hoy + 7 días
       const vencimientoPorDefecto = new Date(
         Date.now() + 7 * 24 * 60 * 60 * 1000
       )
@@ -120,11 +142,12 @@ export function SolicitudProvider({ children }) {
         justificacion: formData.justificacion,
         objetivo_general: formData.objetivoGeneral,
         objetivos_especificos: formData.objetivosEspecificos,
+        titulo_proyecto: formData.tituloProyecto,
+        beneficiario: formData.beneficiarios,
+        estrategia_solucion: formData.estrategiaSolucion,
         prioridad: "Medium",
         vencimiento: vencimientoPorDefecto,
       };
-
-      console.log("Payload enviado a /api/solicitudes:", payload);
 
       const res = await api.post("/solicitudes", payload);
       const nuevaUi = mapSolicitudFromApi(res.data);
@@ -134,7 +157,7 @@ export function SolicitudProvider({ children }) {
 
       return nuevaUi;
     } catch (err) {
-      console.error("Error creando solicitud:", err?.response?.data || err);
+      console.error("Error creando solicitud:", err);
       throw err;
     } finally {
       setLoading(false);
@@ -153,13 +176,23 @@ export function SolicitudProvider({ children }) {
         observation,
       });
 
-      // aquí podrías volver a cargar una sola solicitud desde el backend;
-      // por simplicidad, de momento solo actualizamos el status localmente
       setSolicitudes((current) =>
         (current || []).map((s) =>
-          s._raw && s._raw.id === idInterno ? { ...s, status: newStatus } : s
+          s._raw && s._raw.id === idInterno
+            ? { ...s, status: newStatus, estado: newStatus }
+            : s
         )
       );
+
+      if (
+        mySolicitud &&
+        mySolicitud._raw &&
+        mySolicitud._raw.id === idInterno
+      ) {
+        setMySolicitud((prev) =>
+          prev ? { ...prev, status: newStatus, estado: newStatus } : prev
+        );
+      }
     } catch (err) {
       console.error("Error actualizando estado de solicitud:", err);
       throw err;

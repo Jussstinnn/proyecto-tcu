@@ -1,14 +1,24 @@
 const pool = require("../config/db");
 
 // GET /api/instituciones
-// Todos pueden ver la lista (students y admins)
 async function getAllInstituciones(req, res) {
   try {
-    const [rows] = await pool.query(
-      `SELECT id, nombre, contacto_email, tipo_servicio, estado, created_at
-       FROM instituciones
-       ORDER BY nombre ASC`
-    );
+    const { estado } = req.query;
+
+    let sql = `
+      SELECT id, nombre, contacto_email, tipo_servicio, estado, created_at
+      FROM instituciones
+    `;
+    const params = [];
+
+    if (estado) {
+      sql += " WHERE estado = ?";
+      params.push(estado);
+    }
+
+    sql += " ORDER BY nombre ASC";
+
+    const [rows] = await pool.query(sql, params);
     res.json(rows);
   } catch (err) {
     console.error("Error getAllInstituciones:", err);
@@ -42,6 +52,36 @@ async function createInstitucion(req, res) {
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error("Error createInstitucion:", err);
+    res.status(500).json({ message: "Error en el servidor" });
+  }
+}
+
+// POST /api/instituciones/solicitar (ESTUDIANTE)
+async function createInstitucionPublic(req, res) {
+  const { nombre, contacto_email, tipo_servicio } = req.body;
+
+  if (!nombre || !contacto_email || !tipo_servicio) {
+    return res.status(400).json({
+      message: "nombre, contacto_email y tipo_servicio son requeridos",
+    });
+  }
+
+  try {
+    const [result] = await pool.query(
+      `INSERT INTO instituciones
+       (nombre, contacto_email, tipo_servicio, estado)
+       VALUES (?,?,?,'Pendiente')`,
+      [nombre, contacto_email, tipo_servicio]
+    );
+
+    const [rows] = await pool.query(
+      "SELECT * FROM instituciones WHERE id = ?",
+      [result.insertId]
+    );
+
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error("Error createInstitucionPublic:", err);
     res.status(500).json({ message: "Error en el servidor" });
   }
 }
@@ -85,7 +125,11 @@ async function updateInstitucionStatus(req, res) {
       estado,
       id,
     ]);
-    res.json({ message: "Estado actualizado" });
+    const [rows] = await pool.query(
+      "SELECT * FROM instituciones WHERE id = ?",
+      [id]
+    );
+    res.json(rows[0]);
   } catch (err) {
     console.error("Error updateInstitucionStatus:", err);
     res.status(500).json({ message: "Error en el servidor" });
@@ -95,6 +139,7 @@ async function updateInstitucionStatus(req, res) {
 module.exports = {
   getAllInstituciones,
   createInstitucion,
+  createInstitucionPublic,
   updateInstitucion,
   updateInstitucionStatus,
 };

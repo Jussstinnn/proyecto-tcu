@@ -27,9 +27,6 @@ export default function AdminDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  console.log("AdminDashboard - total solicitudes:", solicitudes.length);
-  console.log("AdminDashboard - solicitudes:", solicitudes);
-
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSolicitud, setSelectedSolicitud] = useState(null);
 
@@ -58,27 +55,41 @@ export default function AdminDashboard() {
     setIsModalOpen(false);
   };
 
+  // OJO: ahora usamos el id interno desde _raw.id
   const handleApprove = async (observation) => {
-    if (!selectedSolicitud) return;
-    await updateSolicitudStatus(selectedSolicitud.id, "Aprobado", observation);
+    if (!selectedSolicitud || !selectedSolicitud._raw) return;
+    await updateSolicitudStatus(
+      selectedSolicitud._raw.id,
+      "Aprobado",
+      observation
+    );
     closeModal();
   };
 
   const handleReject = async (observation) => {
-    if (!selectedSolicitud) return;
-    await updateSolicitudStatus(selectedSolicitud.id, "Rechazado", observation);
+    if (!selectedSolicitud || !selectedSolicitud._raw) return;
+    await updateSolicitudStatus(
+      selectedSolicitud._raw.id,
+      "Rechazado",
+      observation
+    );
     closeModal();
   };
 
   const handleReturn = async (observation) => {
-    if (!selectedSolicitud) return;
-    await updateSolicitudStatus(selectedSolicitud.id, "Observado", observation);
+    if (!selectedSolicitud || !selectedSolicitud._raw) return;
+    await updateSolicitudStatus(
+      selectedSolicitud._raw.id,
+      "Observado",
+      observation
+    );
     closeModal();
   };
 
-  const handleAssign = async (solicitudId, reviewer) => {
+  // recibe idInterno (de _raw.id)
+  const handleAssign = async (idInterno, reviewer) => {
     if (!reviewer) return;
-    await assignReviewer(solicitudId, reviewer);
+    await assignReviewer(idInterno, reviewer);
   };
 
   // ====== HELPERS PARA CLASES ======
@@ -118,27 +129,22 @@ export default function AdminDashboard() {
     return "bg-purple-100 text-purple-700";
   };
 
-  // ====== APLICAR FILTROS (usando campos de la BD) ======
+  // ====== APLICAR FILTROS (usando la forma UI del contexto) ======
   const filteredSolicitudes = solicitudes.filter((s) => {
     const searchText = search.toLowerCase();
 
-    const subjectBase =
-      s.objetivo_general ||
-      s.subj ||
-      "Anteproyecto de Trabajo Comunal Universitario";
-
     const matchesSearch =
       !searchText ||
-      (s.codigo_publico || String(s.id)).toLowerCase().includes(searchText) ||
-      (s.estudiante_nombre || "").toLowerCase().includes(searchText) ||
-      subjectBase.toLowerCase().includes(searchText);
+      (s.id || "").toLowerCase().includes(searchText) ||
+      (s.req || "").toLowerCase().includes(searchText) ||
+      (s.subj || "").toLowerCase().includes(searchText);
 
     const matchesPriority =
-      priorityFilter === "all" || s.prioridad === priorityFilter;
+      priorityFilter === "all" || s.prio === priorityFilter;
 
-    const matchesStatus = statusFilter === "all" || s.estado === statusFilter;
+    const matchesStatus = statusFilter === "all" || s.status === statusFilter;
 
-    const due = s.vencimiento; // DATE 'YYYY-MM-DD'
+    const due = s.due; // date string 'YYYY-MM-DD' o similar
     const matchesFromDate = !fromDate || (due && due >= fromDate);
     const matchesToDate = !toDate || (due && due <= toDate);
 
@@ -157,15 +163,17 @@ export default function AdminDashboard() {
     );
   });
 
-  // ====== RESÚMENES (usando estado de la BD) ======
+  // ====== RESÚMENES (usando status de la forma UI) ======
   const total = solicitudes.length;
   const pendientes = solicitudes.filter(
-    (s) => s.estado === "Enviado" || s.estado === "Open"
+    (s) =>
+      s.status === "Enviado" ||
+      s.status === "En Revisión" ||
+      s.status === "Observado" ||
+      s.status === "Open"
   ).length;
-  const aprobadas = solicitudes.filter(
-    (s) => s.estado === "Aprobado" || s.estado === "Closed"
-  ).length;
-  const rechazadas = solicitudes.filter((s) => s.estado === "Rechazado").length;
+  const aprobadas = solicitudes.filter((s) => s.status === "Aprobado").length;
+  const rechazadas = solicitudes.filter((s) => s.status === "Rechazado").length;
 
   return (
     <>
@@ -353,85 +361,76 @@ export default function AdminDashboard() {
                     )}
 
                     {!loading &&
-                      filteredSolicitudes.map((ticket) => {
-                        const subjectBase =
-                          ticket.objetivo_general ||
-                          ticket.subj ||
-                          "Anteproyecto de Trabajo Comunal Universitario";
-
-                        return (
-                          <tr
-                            key={ticket.id}
-                            className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
-                          >
-                            <td className="p-3 font-medium text-slate-800">
-                              {ticket.codigo_publico || ticket.id}
-                            </td>
-                            <td className="p-3 text-slate-700">
-                              {ticket.estudiante_nombre}
-                            </td>
-                            <td className="p-3 text-slate-700">
-                              {subjectBase}
-                            </td>
-                            <td className="p-3">
+                      filteredSolicitudes.map((ticket) => (
+                        <tr
+                          key={ticket._raw.id}
+                          className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
+                        >
+                          <td className="p-3 font-medium text-slate-800">
+                            {ticket.id}
+                          </td>
+                          <td className="p-3 text-slate-700">
+                            {ticket.formData?.nombre || ticket.req || "-"}
+                          </td>
+                          <td className="p-3 text-slate-700">{ticket.subj}</td>
+                          <td className="p-3">
+                            <span
+                              className={`px-3 py-1 rounded-full font-medium text-[11px] ${getPriorityClass(
+                                ticket.prio
+                              )}`}
+                            >
+                              {ticket.prio}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span
+                              className={`px-3 py-1 rounded-full font-medium text-[11px] ${getStatusClass(
+                                ticket.status
+                              )}`}
+                            >
+                              {ticket.status}
+                            </span>
+                          </td>
+                          <td className="p-3 text-slate-700">
+                            <div className="flex flex-col gap-1">
                               <span
-                                className={`px-3 py-1 rounded-full font-medium text-[11px] ${getPriorityClass(
-                                  ticket.prioridad
+                                className={`inline-flex px-2 py-1 rounded-full text-[11px] font-medium ${getAssignedClass(
+                                  ticket.assigned_to
                                 )}`}
                               >
-                                {ticket.prioridad}
+                                {ticket.assigned_to
+                                  ? ticket.assigned_to
+                                  : "Sin asignar"}
                               </span>
-                            </td>
-                            <td className="p-3">
-                              <span
-                                className={`px-3 py-1 rounded-full font-medium text-[11px] ${getStatusClass(
-                                  ticket.estado
-                                )}`}
+                              <select
+                                value={ticket.assigned_to || ""}
+                                onChange={(e) =>
+                                  handleAssign(ticket._raw.id, e.target.value)
+                                }
+                                className="mt-1 border border-slate-300 rounded-lg px-2 py-1 text-[11px] text-slate-700"
                               >
-                                {ticket.estado}
-                              </span>
-                            </td>
-                            <td className="p-3 text-slate-700">
-                              <div className="flex flex-col gap-1">
-                                <span
-                                  className={`inline-flex px-2 py-1 rounded-full text-[11px] font-medium ${getAssignedClass(
-                                    ticket.assigned_to
-                                  )}`}
-                                >
-                                  {ticket.assigned_to
-                                    ? ticket.assigned_to
-                                    : "Sin asignar"}
-                                </span>
-                                <select
-                                  value={ticket.assigned_to || ""}
-                                  onChange={(e) =>
-                                    handleAssign(ticket.id, e.target.value)
-                                  }
-                                  className="mt-1 border border-slate-300 rounded-lg px-2 py-1 text-[11px] text-slate-700"
-                                >
-                                  <option value="">Asignar revisor...</option>
-                                  {reviewers.map((rev) => (
-                                    <option key={rev} value={rev}>
-                                      {rev}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </td>
-                            <td className="p-3 text-slate-700">
-                              {ticket.vencimiento}
-                            </td>
-                            <td className="p-3 text-slate-700">
-                              <button
-                                onClick={() => openModal(ticket)}
-                                className="text-[rgba(2,14,159,1)] hover:underline font-semibold text-xs"
-                              >
-                                Ver detalle
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                                <option value="">Asignar revisor...</option>
+                                {reviewers.map((rev) => (
+                                  <option key={rev} value={rev}>
+                                    {rev}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </td>
+                          <td className="p-3 text-slate-700">
+                            {ticket.due || "-"}
+                          </td>
+                          <td className="p-3 text-slate-700">
+                            <button
+                              onClick={() => openModal(ticket)}
+                              className="text-[rgba(2,14,159,1)] hover:underline font-semibold text-xs"
+                            >
+                              Ver detalle
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
 
                     {!loading && filteredSolicitudes.length === 0 && (
                       <tr>

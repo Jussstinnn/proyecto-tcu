@@ -1,3 +1,4 @@
+// src/pages/StudentPortal.jsx
 import { useEffect, useState } from "react";
 import {
   LuLayoutDashboard,
@@ -12,28 +13,106 @@ import {
 
 import { useSolicitudes } from "../contexts/SolicitudContext";
 import StudentStatusPage from "./StudentStatusPage";
+import api from "../api/apiClient";
 
-// Datos iniciales del formulario
+/* ============================================================
+   FORM DATA INICIAL
+   ============================================================ */
 const initialFormData = {
-  nombre: "Eddier Soto",
-  cedula: "1-1234-5678",
+  nombre: "",
+  cedula: "",
   carrera: "",
+
+  // Institución
+  institucion_id: "",
   institucion: "",
+
+  // Campos del anteproyecto (formato U)
+  tituloProyecto: "",
   justificacion: "",
   objetivoGeneral: "",
   objetivosEspecificos: "",
+  beneficiarios: "",
+  estrategiaSolucion: "",
 };
 
-/* ===========================
+/* ============================================================
    WIZARD DE INSCRIPCIÓN
-   =========================== */
-
+   ============================================================ */
 function StudentWizard({ onCompleted }) {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState(initialFormData);
 
   const { addSolicitud } = useSolicitudes();
 
+  // Instituciones desde la BD
+  const [instituciones, setInstituciones] = useState([]);
+  const [loadingInstituciones, setLoadingInstituciones] = useState(false);
+
+  // Mensaje tipo “toast” dentro del wizard
+  const [flash, setFlash] = useState(null); // { text, type: 'success' | 'error' }
+
+  const showMessage = (text, type = "success") => {
+    setFlash({ text, type });
+    // opcional: auto-ocultar en unos segundos
+    setTimeout(() => {
+      setFlash((prev) => (prev && prev.text === text ? null : prev));
+    }, 4000);
+  };
+
+  /* === CARGAR DATOS DEL USUARIO DESDE BACKEND === */
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const res = await api.get("/user", {
+          params: { email: "esoto@ufidelitas.ac.cr" }, // DEMO
+        });
+
+        if (res.data) {
+          const user = res.data;
+          setFormData((prev) => ({
+            ...prev,
+            nombre: user.nombre || "",
+            cedula: user.cedula || "",
+            carrera: user.carrera || "",
+          }));
+        }
+      } catch (err) {
+        console.error("Error cargando usuario:", err);
+        showMessage(
+          "No se pudo cargar la información del estudiante.",
+          "error"
+        );
+      }
+    };
+
+    loadUser();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* === CARGAR INSTITUCIONES APROBADAS === */
+  useEffect(() => {
+    const loadInstituciones = async () => {
+      setLoadingInstituciones(true);
+      try {
+        const res = await api.get("/instituciones", {
+          params: { estado: "Aprobada" },
+        });
+        const list = Array.isArray(res.data) ? res.data : [];
+        setInstituciones(list);
+      } catch (err) {
+        console.error("Error cargando instituciones:", err);
+        showMessage("No se pudieron cargar las instituciones.", "error");
+      } finally {
+        setLoadingInstituciones(false);
+      }
+    };
+
+    loadInstituciones();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* === HANDLERS === */
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -41,36 +120,50 @@ function StudentWizard({ onCompleted }) {
 
   const handleBack = () => {
     if (currentStep > 1) {
+      setFlash(null);
       setCurrentStep((prev) => prev - 1);
     }
   };
 
   const handleNext = async () => {
-    // Avanzar pasos 1-3
-    if (currentStep < 3) {
+    if (currentStep < 4) {
+      setFlash(null);
       setCurrentStep((prev) => prev + 1);
       return;
     }
 
     // Validación mínima antes de enviar
-    if (!formData.objetivoGeneral || !formData.institucion) {
-      alert(
-        "Por favor, complete al menos la institución y el objetivo general."
+    if (!formData.institucion_id || !formData.objetivoGeneral) {
+      showMessage(
+        "Por favor, selecciona una institución y escribe al menos el objetivo general.",
+        "error"
       );
       return;
     }
 
+    // Payload compatible con backend (camelCase + snake_case)
+    const payload = {
+      ...formData,
+      titulo_proyecto: formData.tituloProyecto,
+      descripcion_problema: formData.justificacion,
+      objetivo_general: formData.objetivoGeneral,
+      objetivos_especificos: formData.objetivosEspecificos,
+      beneficiario: formData.beneficiarios,
+      estrategia_solucion: formData.estrategiaSolucion,
+    };
+
     try {
-      await addSolicitud(formData);
-      alert("¡Solicitud enviada con éxito!");
+      await addSolicitud(payload);
+      showMessage("¡Solicitud de TCU enviada con éxito!", "success");
 
       if (onCompleted) {
         onCompleted();
       }
     } catch (err) {
       console.error("Error al enviar solicitud:", err);
-      alert(
-        "Ocurrió un error al enviar tu solicitud. Inténtalo de nuevo en unos minutos."
+      showMessage(
+        "Ocurrió un error al enviar tu solicitud. Inténtalo de nuevo en unos minutos.",
+        "error"
       );
     }
   };
@@ -78,8 +171,14 @@ function StudentWizard({ onCompleted }) {
   const steps = [
     { id: 1, name: "Datos Personales", icon: LuUser },
     { id: 2, name: "Institución", icon: LuBuilding },
-    { id: 3, name: "Objetivos y Proyecto", icon: LuTarget },
+    { id: 3, name: "Proyecto y objetivos", icon: LuTarget },
+    { id: 4, name: "Confirmación", icon: LuFileText },
   ];
+
+  const flashClasses =
+    flash?.type === "error"
+      ? "bg-red-50 text-red-700 border border-red-200"
+      : "bg-emerald-50 text-emerald-700 border border-emerald-200";
 
   return (
     <div className="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden">
@@ -115,6 +214,13 @@ function StudentWizard({ onCompleted }) {
             );
           })}
         </nav>
+
+        {/* Banner de mensajes */}
+        {flash && (
+          <div className={`mt-4 px-4 py-2 rounded-xl text-sm ${flashClasses}`}>
+            {flash.text}
+          </div>
+        )}
       </div>
 
       {/* Contenido del paso */}
@@ -126,11 +232,21 @@ function StudentWizard({ onCompleted }) {
           />
         )}
         {currentStep === 2 && (
-          <Step2_Institucion formData={formData} handleChange={handleChange} />
+          <Step2_Institucion
+            formData={formData}
+            handleChange={handleChange}
+            instituciones={instituciones}
+            loading={loadingInstituciones}
+            onNewInstitution={(inst) =>
+              setInstituciones((prev) => [...prev, inst])
+            }
+            onNotify={showMessage}
+          />
         )}
         {currentStep === 3 && (
-          <Step3_Objetivos formData={formData} handleChange={handleChange} />
+          <Step3_ProyectoU formData={formData} handleChange={handleChange} />
         )}
+        {currentStep === 4 && <Step4_Resumen formData={formData} />}
       </div>
 
       {/* Footer del wizard */}
@@ -153,13 +269,15 @@ function StudentWizard({ onCompleted }) {
   );
 }
 
-/* ===========================
+/* ============================================================
    DASHBOARD PRINCIPAL /PORTAL
-   =========================== */
+   ============================================================ */
 
 export default function StudentPortal() {
   const { mySolicitud, fetchMySolicitud } = useSolicitudes();
   const [activeTab, setActiveTab] = useState("overview");
+
+  const [globalFlash, setGlobalFlash] = useState(null);
 
   // Cargar solicitud propia al entrar al portal
   useEffect(() => {
@@ -172,6 +290,19 @@ export default function StudentPortal() {
   const displayName =
     mySolicitud?.estudiante_nombre || "Estudiante Universidad Fidélitas";
   const displayCareer = mySolicitud?.carrera || "Ingeniería de Software";
+
+  const handleCompletedWizard = async () => {
+    // Recargar estado desde backend y pasar a la pestaña de estado
+    await fetchMySolicitud().catch((err) =>
+      console.error("Error recargando mi solicitud:", err)
+    );
+    setActiveTab("estado");
+
+    setGlobalFlash({
+      text: "¡Tu anteproyecto fue enviado exitosamente!",
+      type: "success",
+    });
+  };
 
   return (
     <div className="min-h-screen bg-slate-100 flex">
@@ -231,9 +362,6 @@ export default function StudentPortal() {
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="hidden md:block text-xs text-slate-500">
-              Período TCU activo
-            </div>
             <div className="flex items-center gap-2">
               <div className="text-right hidden sm:block">
                 <p className="text-xs font-semibold text-slate-700">
@@ -259,11 +387,34 @@ export default function StudentPortal() {
           )}
 
           {activeTab === "inscripcion" && (
-            <StudentWizard onCompleted={() => setActiveTab("estado")} />
+            <StudentWizard onCompleted={handleCompletedWizard} />
           )}
 
           {activeTab === "estado" && (
             <>
+              {/* 🔔 Banner global arriba del estado */}
+              {globalFlash && (
+                <div
+                  className={
+                    "mb-4 px-4 py-2 rounded-xl text-sm border " +
+                    (globalFlash.type === "error"
+                      ? "bg-red-50 text-red-700 border-red-200"
+                      : "bg-emerald-50 text-emerald-700 border-emerald-200")
+                  }
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span>{globalFlash.text}</span>
+                    <button
+                      type="button"
+                      onClick={() => setGlobalFlash(null)}
+                      className="text-[11px] px-2 py-1 rounded hover:bg-white/40"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {mySolicitud ? (
                 <StudentStatusPage solicitud={mySolicitud} />
               ) : (
@@ -291,9 +442,9 @@ export default function StudentPortal() {
   );
 }
 
-/* ===========================
+/* ============================================================
    COMPONENTES DE APOYO
-   =========================== */
+   ============================================================ */
 
 function SidebarItem({ icon: Icon, label, active, onClick }) {
   const base =
@@ -402,11 +553,11 @@ function OverviewSection({ mySolicitud, goToInscripcion, goToEstado }) {
   );
 }
 
-/* ===========================
+/* ============================================================
    STEPS DEL WIZARD
-   =========================== */
+   ============================================================ */
 
-function Step1_DatosPersonales({ formData, handleChange }) {
+function Step1_DatosPersonales({ formData }) {
   return (
     <div>
       <h3 className="text-lg font-semibold mb-4">
@@ -416,97 +567,288 @@ function Step1_DatosPersonales({ formData, handleChange }) {
         <input
           name="nombre"
           value={formData.nombre}
-          onChange={handleChange}
           type="text"
           placeholder="Nombre Completo"
-          className="p-2 border rounded-md bg-slate-100"
+          className="p-2 border rounded-md bg-slate-100 text-slate-700"
           readOnly
         />
         <input
           name="cedula"
           value={formData.cedula}
-          onChange={handleChange}
           type="text"
           placeholder="Cédula"
-          className="p-2 border rounded-md"
+          className="p-2 border rounded-md bg-slate-100 text-slate-700"
+          readOnly
         />
-        <select
+        <input
           name="carrera"
           value={formData.carrera}
-          onChange={handleChange}
-          className="p-2 border rounded-md md:col-span-2"
-        >
-          <option value="">Selecciona tu carrera</option>
-          <option value="Ingeniería de Software">Ingeniería de Software</option>
-          <option value="Administración">Administración</option>
-        </select>
+          type="text"
+          placeholder="Carrera"
+          className="p-2 border rounded-md bg-slate-100 text-slate-700 md:col-span-2"
+          readOnly
+        />
       </div>
     </div>
   );
 }
 
-function Step2_Institucion({ formData, handleChange }) {
+function Step2_Institucion({
+  formData,
+  handleChange,
+  instituciones,
+  loading,
+  onNewInstitution,
+  onNotify,
+}) {
+  const [showNewForm, setShowNewForm] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newType, setNewType] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const handleSelect = (e) => {
+    const id = e.target.value;
+
+    if (id === "__new__") {
+      setShowNewForm(true);
+      // limpiamos selección anterior
+      handleChange({ target: { name: "institucion_id", value: "" } });
+      handleChange({ target: { name: "institucion", value: "" } });
+      return;
+    }
+
+    setShowNewForm(false);
+    const inst = instituciones.find((i) => String(i.id) === String(id));
+
+    handleChange({ target: { name: "institucion_id", value: id } });
+    handleChange({
+      target: { name: "institucion", value: inst ? inst.nombre : "" },
+    });
+  };
+
+  const handleSubmitNew = async () => {
+    if (!newName || !newEmail || !newType) {
+      onNotify &&
+        onNotify(
+          "Por favor, completá nombre, correo y tipo de servicio para la institución.",
+          "error"
+        );
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const res = await api.post("/instituciones/solicitar", {
+        nombre: newName,
+        contacto_email: newEmail,
+        tipo_servicio: newType,
+      });
+
+      const nueva = res.data;
+
+      onNotify &&
+        onNotify(
+          "Institución enviada para aprobación. Quedará en estado Pendiente para la coordinación.",
+          "success"
+        );
+
+      if (onNewInstitution) {
+        onNewInstitution(nueva);
+      }
+
+      // Dejamos seleccionada la institución recién creada en el formulario
+      handleChange({
+        target: { name: "institucion_id", value: nueva.id },
+      });
+      handleChange({
+        target: { name: "institucion", value: nueva.nombre },
+      });
+
+      setShowNewForm(false);
+      setNewName("");
+      setNewEmail("");
+      setNewType("");
+    } catch (err) {
+      console.error("Error registrando nueva institución:", err);
+      onNotify &&
+        onNotify(
+          "No se pudo registrar la institución. Intenta de nuevo o contacta a coordinación.",
+          "error"
+        );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div>
       <h3 className="text-lg font-semibold mb-4">
         Paso 2: Selección de Institución
       </h3>
+
+      {loading && (
+        <p className="text-sm text-slate-500 mb-3">
+          Cargando instituciones disponibles...
+        </p>
+      )}
+
       <select
-        name="institucion"
-        value={formData.institucion}
-        onChange={handleChange}
+        name="institucion_select"
+        value={formData.institucion_id || ""}
+        onChange={handleSelect}
         className="p-2 border rounded-md w-full mb-4"
       >
-        <option value="">Instituciones Habilitadas (Cargadas de la BD)</option>
-        <option value="Hogar de Ancianos Luz y Vida">
-          Hogar de Ancianos Luz y Vida
+        <option value="">
+          {loading
+            ? "Cargando..."
+            : "Selecciona una institución habilitada desde la BD"}
         </option>
-        <option value="Escuela El Porvenir">Escuela El Porvenir</option>
-        <option value="[NUEVA] Otra institución">
-          [NUEVA] Otra institución (registrar)
-        </option>
+        {instituciones.map((inst) => (
+          <option key={inst.id} value={inst.id}>
+            {inst.nombre}
+          </option>
+        ))}
+        <option value="__new__">[NUEVA] Registrar otra institución</option>
       </select>
+
+      {!loading && instituciones.length === 0 && !showNewForm && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+          Aún no hay instituciones aprobadas en el sistema. Podés registrar una
+          nueva institución para que sea revisada.
+        </p>
+      )}
+
+      {showNewForm && (
+        <div className="mt-4 p-4 border border-slate-200 rounded-xl bg-slate-50 space-y-3 text-sm">
+          <p className="font-semibold text-slate-800">
+            Registrar nueva institución para aprobación
+          </p>
+
+          <input
+            type="text"
+            placeholder="Nombre de la institución"
+            className="w-full p-2 border rounded-md"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+          />
+          <input
+            type="email"
+            placeholder="Correo de contacto"
+            className="w-full p-2 border rounded-md"
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+          />
+          <input
+            type="text"
+            placeholder="Tipo de servicio (Ej: Adulto mayor, Educación)"
+            className="w-full p-2 border rounded-md"
+            value={newType}
+            onChange={(e) => setNewType(e.target.value)}
+          />
+
+          <div className="flex gap-2 justify-end pt-1">
+            <button
+              type="button"
+              onClick={() => setShowNewForm(false)}
+              className="px-3 py-1.5 text-xs bg-slate-200 rounded-md"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmitNew}
+              disabled={saving}
+              className="px-4 py-1.5 text-xs bg-[rgba(2,14,159,1)] text-white rounded-md disabled:opacity-60"
+            >
+              {saving ? "Enviando..." : "Enviar para aprobación"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function Step3_Objetivos({ formData, handleChange }) {
+function Step3_ProyectoU({ formData, handleChange }) {
   return (
     <div>
       <h3 className="text-lg font-semibold mb-4">
-        Paso 3: Objetivos y Justificación
+        Paso 3: Datos del proyecto y objetivos
       </h3>
-      <div className="space-y-4">
+      <div className="space-y-4 text-sm">
+        <textarea
+          name="tituloProyecto"
+          value={formData.tituloProyecto}
+          onChange={handleChange}
+          placeholder="Título del proyecto"
+          className="w-full p-2 border rounded-md h-16"
+        />
         <textarea
           name="justificacion"
           value={formData.justificacion}
           onChange={handleChange}
           placeholder="Descripción del problema"
           className="w-full p-2 border rounded-md h-20"
-          required
         />
         <textarea
           name="objetivoGeneral"
           value={formData.objetivoGeneral}
           onChange={handleChange}
-          placeholder="Objetivo General 1"
-          className="w-full p-2 border rounded-md h-20"
+          placeholder="Objetivo general"
+          className="w-full p-2 border rounded-md h-16"
         />
         <textarea
           name="objetivosEspecificos"
           value={formData.objetivosEspecificos}
           onChange={handleChange}
-          placeholder="Objetivo específico 1"
-          className="w-full p-2 border rounded-md h-12"
+          placeholder="Objetivos específicos (puedes separarlos por líneas)"
+          className="w-full p-2 border rounded-md h-20"
         />
-        <div className="p-4 bg-yellow-50 border-l-4 border-yellow-400">
-          <p className="font-bold text-yellow-800">Asistente IA (mockup)</p>
-          <p className="text-sm text-yellow-700">
-            “Tu objetivo general no especifica la comunidad beneficiada. ¿Deseas
-            mejorar esta redacción?”
-          </p>
-        </div>
+        <textarea
+          name="beneficiarios"
+          value={formData.beneficiarios}
+          onChange={handleChange}
+          placeholder="¿A quién se beneficiará el proyecto?"
+          className="w-full p-2 border rounded-md h-16"
+        />
+        <textarea
+          name="estrategiaSolucion"
+          value={formData.estrategiaSolucion}
+          onChange={handleChange}
+          placeholder="Estrategia y pertinencia de solución (actividades principales)"
+          className="w-full p-2 border rounded-md h-20"
+        />
       </div>
+    </div>
+  );
+}
+
+function Step4_Resumen({ formData }) {
+  return (
+    <div>
+      <h3 className="text-lg font-semibold mb-4">
+        Paso 4: Confirmación rápida
+      </h3>
+      <p className="text-sm text-slate-600 mb-3">
+        Al finalizar se enviará tu anteproyecto para revisión. Podrás seguir su
+        estado desde el panel “Estado del anteproyecto”.
+      </p>
+      <ul className="text-sm text-slate-700 space-y-1 list-disc list-inside">
+        <li>Institución: {formData.institucion || "No seleccionada"}</li>
+        <li>Título: {formData.tituloProyecto || "Sin título"}</li>
+        <li>Justificación: {formData.justificacion || "Sin objetivo"}</li>
+        <li>Objetivo general: {formData.objetivoGeneral || "Sin objetivo"}</li>
+        <li>
+          Objetivos específicos:{" "}
+          {formData.objetivosEspecificos || "Sin objetivo"}
+        </li>
+        <li>Beneficiario: {formData.beneficiarios || "Sin objetivo"}</li>
+        <li>
+          Estrategia de solución:{" "}
+          {formData.estrategiaSolucion || "Sin objetivo"}
+        </li>
+      </ul>
     </div>
   );
 }

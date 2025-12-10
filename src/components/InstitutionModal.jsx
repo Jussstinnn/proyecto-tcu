@@ -1,3 +1,4 @@
+// src/components/InstitutionModal.jsx
 import { useState, useEffect } from "react";
 import { LuX } from "react-icons/lu";
 
@@ -16,7 +17,6 @@ export default function InstitutionModal({
   useEffect(() => {
     if (!isOpen) return;
 
-    // Soportar tanto {name, contact, type} como {nombre, contacto_email, tipo_servicio}
     const data = institutionData || {
       name: "",
       contact: "",
@@ -40,7 +40,6 @@ export default function InstitutionModal({
       return;
     }
 
-    // Enviamos ambos formatos para compatibilidad
     onSave(
       {
         // formato legacy
@@ -60,7 +59,6 @@ export default function InstitutionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      {/* CONTENEDOR GRANDE */}
       <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
         {/* HEADER */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
@@ -88,7 +86,6 @@ export default function InstitutionModal({
           onSubmit={handleSubmit}
           className="px-6 py-5 space-y-5"
         >
-          {/* fila 1: nombre */}
           <div>
             <label
               htmlFor="name"
@@ -106,7 +103,6 @@ export default function InstitutionModal({
             />
           </div>
 
-          {/* fila 2: contacto + tipo */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label
@@ -143,7 +139,6 @@ export default function InstitutionModal({
             </div>
           </div>
 
-          {/* NOTA INFORMATIVA */}
           <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-xs text-slate-600">
             Recordá que solo se aprueban instituciones <b>sin fines de lucro</b>{" "}
             y con alineación al reglamento del TCU (ONGs, municipalidades,
