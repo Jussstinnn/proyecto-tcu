@@ -1,4 +1,3 @@
-// src/pages/InstitutionsPage.jsx
 import { useEffect, useState } from "react";
 import {
   LuLayoutDashboard,
@@ -24,7 +23,7 @@ const getStatusClass = (status) => {
   }
 };
 
-// 🔄 Normaliza lo que venga del backend
+// Normalizar lo que venga del backend
 function mapInstitutionFromApi(apiInst) {
   if (!apiInst) return null;
 
@@ -110,7 +109,6 @@ export default function InstitutionsPage() {
   const handleSave = async (formData, id) => {
     try {
       if (id) {
-        // editar
         const payload = {
           nombre: formData.nombre,
           contacto_email: formData.contacto_email,
@@ -122,7 +120,7 @@ export default function InstitutionsPage() {
           current.map((inst) => (inst.id === updated.id ? updated : inst))
         );
       } else {
-        // crear (la dejamos aprobada de una vez)
+        // crear
         const payload = {
           nombre: formData.nombre,
           contacto_email: formData.contacto_email,
@@ -160,7 +158,6 @@ export default function InstitutionsPage() {
     return matchesSearch && matchesStatus && matchesType;
   });
 
-  // tipos únicos para el combo
   const uniqueTypes = Array.from(
     new Set(institutions.map((i) => i.tipo_servicio).filter(Boolean))
   );

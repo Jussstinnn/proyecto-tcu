@@ -3,7 +3,7 @@ const router = express.Router();
 const { register, login, me } = require("../controllers/auth.controller");
 const { authRequired } = require("../middleware/auth.middleware");
 
-// Para pruebas: registrar usuario (STUDENT / ADMIN)
+// Registrar
 router.post("/register", register);
 
 // Login

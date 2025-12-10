@@ -9,9 +9,6 @@ const {
 } = require("../controllers/solicitud.controller");
 // const { authRequired, adminOnly } = require("../middleware/auth.middleware");
 
-// 🔓 MODO DEMO: SIN AUTENTICACIÓN
-// Cuando quieras volver a asegurar, re-activas authRequired/adminOnly
-
 // Estudiante
 router.get("/me", getMySolicitudes);
 router.post("/", createSolicitud);

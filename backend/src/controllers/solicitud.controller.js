@@ -1,21 +1,22 @@
-// controllers/solicitud.controller.js
 const pool = require("../config/db");
 
-// Generar código tipo #12345
 function generateCodigo() {
   const num = Math.floor(Math.random() * 90000) + 10000;
   return `#${num}`;
 }
 
+function toDateOnly(dateStr) {
+  if (!dateStr) return null;
+  try {
+    return new Date(dateStr).toISOString().slice(0, 10);
+  } catch (e) {
+    console.error("Error normalizando fecha vencimiento:", e);
+    return dateStr;
+  }
+}
+
 /**
- * Estudiante: obtener MIS solicitudes
- * DEMO:
- *   - Si viene ?email=... se usa ese correo.
- *   - Si no, se usa uno por defecto (esoto@ufidelitas.ac.cr).
- *
- * Producción:
- *   - Cuando tengas auth real, puedes usar owner_user_id = req.user.id
- *     o owner_email = req.user.email.
+  Estudiante: obtener MIS solicitudes
  */
 async function getMySolicitudes(req, res) {
   try {
@@ -38,7 +39,7 @@ async function getMySolicitudes(req, res) {
 }
 
 /**
- * Admin: obtener TODAS las solicitudes
+  Admin: obtener TODAS las solicitudes
  */
 async function getAllSolicitudes(req, res) {
   try {
@@ -55,26 +56,7 @@ async function getAllSolicitudes(req, res) {
 }
 
 /**
- * Crear solicitud (Estudiante)
- *
- * El FRONT (SolicitudContext.addSolicitud) está enviando:
- * {
- *   estudiante_nombre,
- *   estudiante_cedula,
- *   carrera,
- *   institucion_id,
- *   institucion_nombre,
- *   justificacion,
- *   objetivo_general,
- *   objetivos_especificos,
- *   prioridad,
- *   vencimiento
- * }
- *
- * Además aquí resolvemos:
- *   - owner_user_id: si hay req.user => req.user.id; si no, usamos 1 (demo)
- *   - owner_email:  si hay req.user => req.user.email;
- *                   si no, usamos body.owner_email o un demo.
+  Crear solicitud (Estudiante)
  */
 async function createSolicitud(req, res) {
   const {
@@ -88,7 +70,7 @@ async function createSolicitud(req, res) {
     objetivo_general,
     objetivos_especificos,
     beneficiario,
-    estrategia_solucion, // ✔ nombre correcto
+    estrategia_solucion,
     prioridad,
     vencimiento,
     owner_email: ownerEmailBody,
@@ -109,6 +91,8 @@ async function createSolicitud(req, res) {
   const ownerUserId = 1;
   const ownerEmail = ownerEmailBody || "esoto@ufidelitas.ac.cr";
   const codigo_publico = generateCodigo();
+
+  const vencimientoDate = toDateOnly(vencimiento);
 
   try {
     const [result] = await pool.query(
@@ -141,15 +125,15 @@ async function createSolicitud(req, res) {
         carrera || "",
         institucion_id || null,
         institucion_nombre,
-        titulo_proyecto, // ✔ ahora sí se inserta
+        titulo_proyecto,
         justificacion,
         objetivo_general,
         objetivos_especificos || "",
-        beneficiario || "", // ✔ se inserta bien
-        estrategia_solucion || "", // ✔ sin error de typo
+        beneficiario || "",
+        estrategia_solucion || "",
         prioridad || "Medium",
         "Enviado",
-        vencimiento,
+        vencimientoDate,
         ownerUserId,
         ownerEmail,
         null,
@@ -184,9 +168,7 @@ async function createSolicitud(req, res) {
 }
 
 /**
- * Actualizar estado de la solicitud (Admin)
- * Body:
- * { status, observation }
+  Actualizar estado de la solicitud (Admin)
  */
 async function updateStatus(req, res) {
   const { id } = req.params;
@@ -204,12 +186,11 @@ async function updateStatus(req, res) {
       [
         id,
         `Estado cambiado a: ${status}`,
-        "admin@ufidelitas.ac.cr", // en producción podrías usar req.user.email
+        "admin@ufidelitas.ac.cr",
         observation || "",
       ]
     );
 
-    // Devolvemos la fila actualizada
     const [rows] = await pool.query("SELECT * FROM solicitudes WHERE id = ?", [
       id,
     ]);
@@ -222,9 +203,7 @@ async function updateStatus(req, res) {
 }
 
 /**
- * Asignar revisor (Admin)
- * Body:
- * { reviewerEmail }
+  Asignar revisor (Admin)
  */
 async function assignReviewer(req, res) {
   const { id } = req.params;
@@ -248,12 +227,11 @@ async function assignReviewer(req, res) {
       [
         id,
         "Solicitud asignada a revisor",
-        "admin@ufidelitas.ac.cr", // o req.user.email en producción
+        "admin@ufidelitas.ac.cr",
         `Asignada a: ${reviewerEmail}`,
       ]
     );
 
-    // Devolvemos la fila actualizada
     const [rows] = await pool.query("SELECT * FROM solicitudes WHERE id = ?", [
       id,
     ]);

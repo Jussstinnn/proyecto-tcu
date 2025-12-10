@@ -17,7 +17,6 @@ function signToken(user) {
 }
 
 // POST /api/auth/register
-// Útil para pruebas. En producción puedes limitarlo o hacerlo solo-admin.
 async function register(req, res) {
   const { nombre, email, password, cedula, carrera, role } = req.body;
 

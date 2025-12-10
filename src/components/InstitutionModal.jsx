@@ -1,4 +1,3 @@
-// src/components/InstitutionModal.jsx
 import { useState, useEffect } from "react";
 import { LuX } from "react-icons/lu";
 
@@ -42,11 +41,9 @@ export default function InstitutionModal({
 
     onSave(
       {
-        // formato legacy
         name,
         contact,
         type,
-        // formato backend
         nombre: name,
         contacto_email: contact,
         tipo_servicio: type,

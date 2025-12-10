@@ -44,7 +44,7 @@ function mapSolicitudFromApi(apiS) {
     assigned_to: apiS.assigned_to || null,
     assign_date: apiS.assign_date || null,
 
-    // datos estudiante
+    // Datos del estudiante
     estudiante_nombre: apiS.estudiante_nombre || "",
     estudiante_cedula: apiS.estudiante_cedula || "",
     carrera: apiS.carrera || "",
@@ -86,7 +86,7 @@ export function SolicitudProvider({ children }) {
   const [mySolicitud, setMySolicitud] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // ADMIN – todas
+  // ADMIN – todas las solicitudes
   const fetchAllSolicitudes = async () => {
     setLoading(true);
     try {
@@ -103,7 +103,7 @@ export function SolicitudProvider({ children }) {
     }
   };
 
-  // ESTUDIANTE – mis solicitudes (tomamos la más reciente)
+  // ESTUDIANTE – Mis solicitudes
   const fetchMySolicitud = async (emailDemo = "esoto@ufidelitas.ac.cr") => {
     setLoading(true);
     try {
@@ -123,12 +123,12 @@ export function SolicitudProvider({ children }) {
     }
   };
 
-  // ESTUDIANTE – crear solicitud
+  // ESTUDIANTE – Crear solicitud
   const addSolicitud = async (formData) => {
     setLoading(true);
     try {
       const vencimientoPorDefecto = new Date(
-        Date.now() + 7 * 24 * 60 * 60 * 1000
+        Date.now() + 15 * 24 * 60 * 60 * 1000
       )
         .toISOString()
         .slice(0, 10);
@@ -164,7 +164,7 @@ export function SolicitudProvider({ children }) {
     }
   };
 
-  // ADMIN – cambiar estado
+  // ADMIN – Cambiar estado
   const updateSolicitudStatus = async (
     idInterno,
     newStatus,
@@ -199,7 +199,7 @@ export function SolicitudProvider({ children }) {
     }
   };
 
-  // ADMIN – asignar revisor
+  // ADMIN – Asignar Revisor
   const assignReviewer = async (idInterno, reviewerEmail) => {
     try {
       await api.patch(`/solicitudes/${idInterno}/assign`, {

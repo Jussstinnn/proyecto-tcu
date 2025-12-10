@@ -24,7 +24,6 @@ export default function AdminDashboard() {
     fetchAllSolicitudes().catch((err) =>
       console.error("Error cargando solicitudes:", err)
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -38,7 +37,7 @@ export default function AdminDashboard() {
   const [toDate, setToDate] = useState("");
   const [assignedFilter, setAssignedFilter] = useState("all");
 
-  // Lista de revisores demo (luego se puede cargar de BD)
+  // Lista de revisores
   const reviewers = [
     "admin.revisor@ufidelitas.ac.cr",
     "coordinacion.tcu@ufidelitas.ac.cr",
@@ -55,7 +54,7 @@ export default function AdminDashboard() {
     setIsModalOpen(false);
   };
 
-  // OJO: ahora usamos el id interno desde _raw.id
+  // ID Interno
   const handleApprove = async (observation) => {
     if (!selectedSolicitud || !selectedSolicitud._raw) return;
     await updateSolicitudStatus(
@@ -86,7 +85,7 @@ export default function AdminDashboard() {
     closeModal();
   };
 
-  // recibe idInterno (de _raw.id)
+  // Recibir ID Interno
   const handleAssign = async (idInterno, reviewer) => {
     if (!reviewer) return;
     await assignReviewer(idInterno, reviewer);
@@ -129,22 +128,38 @@ export default function AdminDashboard() {
     return "bg-purple-100 text-purple-700";
   };
 
-  // ====== APLICAR FILTROS (usando la forma UI del contexto) ======
+  // Vencimiento formato
+  const formatDue = (due) => {
+    if (!due) return "-";
+    const d = new Date(due);
+    if (Number.isNaN(d.getTime())) return due;
+    return d.toLocaleDateString("es-CR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  };
+
+  // ====== APLICAR FILTROS ======
   const filteredSolicitudes = solicitudes.filter((s) => {
     const searchText = search.toLowerCase();
 
+    const idStr = String(s.id || "");
+    const reqStr = String(s.req || "");
+    const subjStr = String(s.subj || "");
+
     const matchesSearch =
       !searchText ||
-      (s.id || "").toLowerCase().includes(searchText) ||
-      (s.req || "").toLowerCase().includes(searchText) ||
-      (s.subj || "").toLowerCase().includes(searchText);
+      idStr.toLowerCase().includes(searchText) ||
+      reqStr.toLowerCase().includes(searchText) ||
+      subjStr.toLowerCase().includes(searchText);
 
     const matchesPriority =
       priorityFilter === "all" || s.prio === priorityFilter;
 
     const matchesStatus = statusFilter === "all" || s.status === statusFilter;
 
-    const due = s.due; // date string 'YYYY-MM-DD' o similar
+    const due = s.due;
     const matchesFromDate = !fromDate || (due && due >= fromDate);
     const matchesToDate = !toDate || (due && due <= toDate);
 
@@ -163,7 +178,7 @@ export default function AdminDashboard() {
     );
   });
 
-  // ====== RESÚMENES (usando status de la forma UI) ======
+  // ====== RESÚMENES ======
   const total = solicitudes.length;
   const pendientes = solicitudes.filter(
     (s) =>
@@ -419,7 +434,7 @@ export default function AdminDashboard() {
                             </div>
                           </td>
                           <td className="p-3 text-slate-700">
-                            {ticket.due || "-"}
+                            {formatDue(ticket.due)}
                           </td>
                           <td className="p-3 text-slate-700">
                             <button

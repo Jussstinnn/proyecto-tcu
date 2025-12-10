@@ -17,7 +17,6 @@ function authRequired(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || "changeme");
-    // decoded: { id, email, role, nombre, iat, exp }
     req.user = decoded;
     next();
   } catch (err) {

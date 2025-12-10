@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../config/db");
 
-// DEMO: obtener un usuario por email
+// Obtener usuario por email
 router.get("/", async (req, res) => {
   const email = req.query.email;
   if (!email) return res.status(400).json({ message: "email requerido" });

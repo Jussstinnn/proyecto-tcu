@@ -52,12 +52,12 @@ export default function StudentStatusPage({ solicitud }) {
           ? "bg-amber-100 text-amber-700"
           : "bg-blue-100 text-blue-700";
 
-  // history ya viene normalizado desde el contexto
+  // History normalizado
   const history = (solicitud.history || []).slice().reverse();
 
-  // Código “tipo código de barras” de 6 caracteres, estable mientras se ve la página
+  // Código de 6 caracteres, temporal (A futuro fijo en BD)
   const approvalCode = useMemo(() => {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // sin 0/1 para evitar confusiones
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let code = "";
     for (let i = 0; i < 6; i++) {
       const idx = Math.floor(Math.random() * chars.length);
@@ -144,7 +144,7 @@ export default function StudentStatusPage({ solicitud }) {
                 key={step.id}
                 className="flex flex-col items-center flex-1 min-w-0"
               >
-                {/* barra de conexión (solo desktop) */}
+                {/* barra de conexión */}
                 {index > 0 && (
                   <div className="hidden sm:block w-full h-[2px] bg-slate-200 mb-[-1.1rem] -z-10" />
                 )}
@@ -245,7 +245,7 @@ export default function StudentStatusPage({ solicitud }) {
             </div>
 
             <div className="flex md:flex-col items-end md:items-center gap-3">
-              {/* Botón solo visual, sin funcionalidad */}
+              {/* Botón solo visual */}
               <button
                 type="button"
                 className="px-4 py-2 text-xs md:text-sm font-semibold rounded-xl bg-[rgba(2,14,159,1)] text-white shadow-sm hover:bg-indigo-900"

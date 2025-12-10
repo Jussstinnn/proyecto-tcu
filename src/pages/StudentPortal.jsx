@@ -132,7 +132,6 @@ function StudentWizard({ onCompleted }) {
       return;
     }
 
-    // Validación mínima antes de enviar
     if (!formData.institucion_id || !formData.objetivoGeneral) {
       showMessage(
         "Por favor, selecciona una institución y escribe al menos el objetivo general.",
@@ -141,7 +140,6 @@ function StudentWizard({ onCompleted }) {
       return;
     }
 
-    // Payload compatible con backend (camelCase + snake_case)
     const payload = {
       ...formData,
       titulo_proyecto: formData.tituloProyecto,
@@ -292,7 +290,6 @@ export default function StudentPortal() {
   const displayCareer = mySolicitud?.carrera || "Ingeniería de Software";
 
   const handleCompletedWizard = async () => {
-    // Recargar estado desde backend y pasar a la pestaña de estado
     await fetchMySolicitud().catch((err) =>
       console.error("Error recargando mi solicitud:", err)
     );
@@ -392,7 +389,7 @@ export default function StudentPortal() {
 
           {activeTab === "estado" && (
             <>
-              {/* 🔔 Banner global arriba del estado */}
+              {/* Banner global arriba del estado */}
               {globalFlash && (
                 <div
                   className={
