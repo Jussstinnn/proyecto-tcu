@@ -1,4 +1,4 @@
-# 📋 Estado de Implementación – Historias de Usuario
+# Estado de Implementación – Historias de Usuario
 
 **Proyecto:** Fidelitas TechSeed
 **Curso:** Diseño y Desarrollo de Sistemas
@@ -6,7 +6,7 @@
 
 ---
 
-## 📌 Introducción
+## Introducción
 
 Este documento presenta el **estado actual de implementación de las Historias de Usuario (HU)** definidas para el proyecto de desarrollo de la plataforma web Fidelitas TechSeed.
 
