@@ -1,24 +1,25 @@
 const pool = require("../config/db");
 
-// GET /api/instituciones
+/**
+ * GET /instituciones
+ * - Si viene ?estado=Aprobada -> filtra
+ * - Si no -> devuelve todas
+ */
 async function getAllInstituciones(req, res) {
   try {
     const { estado } = req.query;
 
-    let sql = `
-      SELECT id, nombre, contacto_email, tipo_servicio, estado, created_at
-      FROM instituciones
-    `;
-    const params = [];
+    let query = `SELECT * FROM instituciones`;
+    let params = [];
 
     if (estado) {
-      sql += " WHERE estado = ?";
+      query += ` WHERE estado = ?`;
       params.push(estado);
     }
 
-    sql += " ORDER BY nombre ASC";
+    query += ` ORDER BY nombre ASC`;
 
-    const [rows] = await pool.query(sql, params);
+    const [rows] = await pool.query(query, params);
     res.json(rows);
   } catch (err) {
     console.error("Error getAllInstituciones:", err);
@@ -26,27 +27,105 @@ async function getAllInstituciones(req, res) {
   }
 }
 
-// POST /api/instituciones (ADMIN)
-async function createInstitucion(req, res) {
-  const { nombre, contacto_email, tipo_servicio, estado } = req.body;
+/**
+ * POST /instituciones/solicitar
+ * Estudiante registra institución para aprobación
+ */
+async function createInstitucionPublic(req, res) {
+  const {
+    nombre,
+    cedula_juridica,
+    supervisor_nombre,
+    supervisor_cargo,
+    supervisor_email,
+    tipo_servicio,
+    created_by_user_id,
+  } = req.body;
 
-  if (!nombre || !contacto_email || !tipo_servicio) {
+  if (!nombre || !cedula_juridica || !supervisor_nombre || !supervisor_email) {
     return res.status(400).json({
-      message: "nombre, contacto_email y tipo_servicio son requeridos",
+      message:
+        "nombre, cedula_juridica, supervisor_nombre y supervisor_email son requeridos",
     });
   }
 
   try {
     const [result] = await pool.query(
-      `INSERT INTO instituciones
-       (nombre, contacto_email, tipo_servicio, estado)
-       VALUES (?,?,?,?)`,
-      [nombre, contacto_email, tipo_servicio, estado || "Pendiente"]
+      `INSERT INTO instituciones (
+        nombre,
+        cedula_juridica,
+        supervisor_nombre,
+        supervisor_cargo,
+        supervisor_email,
+        tipo_servicio,
+        estado,
+        created_by_user_id
+      )
+      VALUES (?,?,?,?,?,?,?,?)`,
+      [
+        nombre,
+        cedula_juridica,
+        supervisor_nombre,
+        supervisor_cargo || null,
+        supervisor_email,
+        tipo_servicio || null,
+        "Pendiente",
+        created_by_user_id || null,
+      ],
     );
 
     const [rows] = await pool.query(
       "SELECT * FROM instituciones WHERE id = ?",
-      [result.insertId]
+      [result.insertId],
+    );
+
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error("Error createInstitucionPublic:", err);
+    res.status(500).json({ message: "Error creando institución" });
+  }
+}
+
+/**
+ * POST /instituciones (ADMIN)
+ */
+async function createInstitucion(req, res) {
+  const {
+    nombre,
+    cedula_juridica,
+    supervisor_nombre,
+    supervisor_cargo,
+    supervisor_email,
+    tipo_servicio,
+    estado,
+  } = req.body;
+
+  try {
+    const [result] = await pool.query(
+      `INSERT INTO instituciones (
+        nombre,
+        cedula_juridica,
+        supervisor_nombre,
+        supervisor_cargo,
+        supervisor_email,
+        tipo_servicio,
+        estado
+      )
+      VALUES (?,?,?,?,?,?,?)`,
+      [
+        nombre,
+        cedula_juridica,
+        supervisor_nombre,
+        supervisor_cargo,
+        supervisor_email,
+        tipo_servicio,
+        estado || "Aprobada",
+      ],
+    );
+
+    const [rows] = await pool.query(
+      "SELECT * FROM instituciones WHERE id = ?",
+      [result.insertId],
     );
 
     res.status(201).json(rows[0]);
@@ -56,52 +135,44 @@ async function createInstitucion(req, res) {
   }
 }
 
-// POST /api/instituciones/solicitar (ESTUDIANTE)
-async function createInstitucionPublic(req, res) {
-  const { nombre, contacto_email, tipo_servicio } = req.body;
-
-  if (!nombre || !contacto_email || !tipo_servicio) {
-    return res.status(400).json({
-      message: "nombre, contacto_email y tipo_servicio son requeridos",
-    });
-  }
-
-  try {
-    const [result] = await pool.query(
-      `INSERT INTO instituciones
-       (nombre, contacto_email, tipo_servicio, estado)
-       VALUES (?,?,?,'Pendiente')`,
-      [nombre, contacto_email, tipo_servicio]
-    );
-
-    const [rows] = await pool.query(
-      "SELECT * FROM instituciones WHERE id = ?",
-      [result.insertId]
-    );
-
-    res.status(201).json(rows[0]);
-  } catch (err) {
-    console.error("Error createInstitucionPublic:", err);
-    res.status(500).json({ message: "Error en el servidor" });
-  }
-}
-
-// PUT /api/instituciones/:id (ADMIN)
+/**
+ * PUT /instituciones/:id (ADMIN)
+ */
 async function updateInstitucion(req, res) {
   const { id } = req.params;
-  const { nombre, contacto_email, tipo_servicio, estado } = req.body;
+  const {
+    nombre,
+    cedula_juridica,
+    supervisor_nombre,
+    supervisor_cargo,
+    supervisor_email,
+    tipo_servicio,
+  } = req.body;
 
   try {
     await pool.query(
       `UPDATE instituciones
-       SET nombre = ?, contacto_email = ?, tipo_servicio = ?, estado = ?
+       SET nombre = ?,
+           cedula_juridica = ?,
+           supervisor_nombre = ?,
+           supervisor_cargo = ?,
+           supervisor_email = ?,
+           tipo_servicio = ?
        WHERE id = ?`,
-      [nombre, contacto_email, tipo_servicio, estado || "Pendiente", id]
+      [
+        nombre,
+        cedula_juridica,
+        supervisor_nombre,
+        supervisor_cargo,
+        supervisor_email,
+        tipo_servicio,
+        id,
+      ],
     );
 
     const [rows] = await pool.query(
       "SELECT * FROM instituciones WHERE id = ?",
-      [id]
+      [id],
     );
 
     res.json(rows[0]);
@@ -111,7 +182,9 @@ async function updateInstitucion(req, res) {
   }
 }
 
-// PATCH /api/instituciones/:id/status (ADMIN)
+/**
+ * PATCH /instituciones/:id/status (ADMIN)
+ */
 async function updateInstitucionStatus(req, res) {
   const { id } = req.params;
   const { estado } = req.body;
@@ -121,14 +194,18 @@ async function updateInstitucionStatus(req, res) {
   }
 
   try {
-    await pool.query("UPDATE instituciones SET estado = ? WHERE id = ?", [
-      estado,
-      id,
-    ]);
+    await pool.query(
+      `UPDATE instituciones
+       SET estado = ?
+       WHERE id = ?`,
+      [estado, id],
+    );
+
     const [rows] = await pool.query(
       "SELECT * FROM instituciones WHERE id = ?",
-      [id]
+      [id],
     );
+
     res.json(rows[0]);
   } catch (err) {
     console.error("Error updateInstitucionStatus:", err);
