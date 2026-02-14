@@ -23,17 +23,25 @@ const initialFormData = {
   cedula: "",
   carrera: "",
 
-  // Institución
+  sede: "",
+  estudiante_email: "",
+  estudiante_phone: "",
+  oficio: "",
+  estado_civil: "",
+  domicilio: "",
+
   institucion_id: "",
   institucion: "",
 
-  // Campos del anteproyecto (formato U)
   tituloProyecto: "",
   justificacion: "",
   objetivoGeneral: "",
-  objetivosEspecificos: "",
+
+  objetivosEspecificosItems: [""],
   beneficiarios: "",
   estrategiaSolucion: "",
+
+  cronogramaItems: [{ actividad: "", tarea: "", horas: "" }],
 };
 
 /* ============================================================
@@ -81,7 +89,7 @@ function StudentWizard({ onCompleted }) {
         console.error("Error cargando usuario:", err);
         showMessage(
           "No se pudo cargar la información del estudiante.",
-          "error"
+          "error",
         );
       }
     };
@@ -118,6 +126,69 @@ function StudentWizard({ onCompleted }) {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  // ===============================
+  // Objetivos específicos (dinámico)
+  // ===============================
+  const addObjetivo = () => {
+    setFormData((prev) => ({
+      ...prev,
+      objetivosEspecificosItems: [...prev.objetivosEspecificosItems, ""],
+    }));
+  };
+
+  const removeObjetivo = (index) => {
+    setFormData((prev) => {
+      const arr = [...prev.objetivosEspecificosItems];
+      arr.splice(index, 1);
+      return {
+        ...prev,
+        objetivosEspecificosItems: arr.length ? arr : [""],
+      };
+    });
+  };
+
+  const updateObjetivo = (index, value) => {
+    setFormData((prev) => {
+      const arr = [...prev.objetivosEspecificosItems];
+      arr[index] = value;
+      return { ...prev, objetivosEspecificosItems: arr };
+    });
+  };
+
+  // ===============================
+  // Cronograma (dinámico)
+  // ===============================
+  const addCronoRow = () => {
+    setFormData((prev) => ({
+      ...prev,
+      cronogramaItems: [
+        ...(prev.cronogramaItems || []),
+        { actividad: "", tarea: "", horas: "" },
+      ],
+    }));
+  };
+
+  const removeCronoRow = (index) => {
+    setFormData((prev) => {
+      const arr = [...(prev.cronogramaItems || [])];
+      arr.splice(index, 1);
+      return {
+        ...prev,
+        cronogramaItems: arr.length
+          ? arr
+          : [{ actividad: "", tarea: "", horas: "" }],
+      };
+    });
+  };
+
+  const updateCronoRow = (index, field, value) => {
+    setFormData((prev) => {
+      const arr = [...(prev.cronogramaItems || [])];
+      arr[index] = { ...arr[index], [field]: value };
+      return { ...prev, cronogramaItems: arr };
+    });
+  };
+
   const handleBack = () => {
     if (currentStep > 1) {
       setFlash(null);
@@ -126,42 +197,98 @@ function StudentWizard({ onCompleted }) {
   };
 
   const handleNext = async () => {
-    if (currentStep < 4) {
+    // Ahora hay 6 steps
+    if (currentStep < 6) {
       setFlash(null);
       setCurrentStep((prev) => prev + 1);
       return;
     }
 
+    // Validación mínima antes de enviar (podés endurecerla)
     if (!formData.institucion_id || !formData.objetivoGeneral) {
       showMessage(
         "Por favor, selecciona una institución y escribe al menos el objetivo general.",
-        "error"
+        "error",
       );
       return;
     }
 
+    // ✅ Normalizar cronograma para BD
+    const cronograma_items = (formData.cronogramaItems || [])
+      .map((r) => ({
+        actividad: String(r.actividad || "").trim(),
+        tarea: String(r.tarea || "").trim(),
+        horas: String(r.horas || "").trim(),
+      }))
+      .filter((r) => r.actividad && r.tarea && r.horas !== "");
+
+    // ✅ objetivos específicos como lista (si tu BD los guarda en tabla)
+    // si vos todavía lo manejás como texto, igual lo convertimos a array por líneas
+    const objetivos_especificos_items = String(
+      formData.objetivosEspecificos || "",
+    )
+      .split("\n")
+      .map((x) => x.trim())
+      .filter(Boolean);
+
     const payload = {
-      ...formData,
+      // 👇 esto es lo que espera tu tabla solicitudes (snapshot del estudiante)
+      estudiante_nombre: formData.nombre,
+      estudiante_cedula: formData.cedula,
+      carrera: formData.carrera,
+
+      // si luego metés sede/email/teléfono/oficio/etc, los agregamos
+      sede: formData.sede || null,
+      estudiante_email: formData.estudiante_email || null,
+      estudiante_phone: formData.estudiante_phone || null,
+      oficio: formData.oficio || null,
+      estado_civil: formData.estado_civil || null,
+      domicilio: formData.domicilio || null,
+      lugar_trabajo: formData.lugar_trabajo || null,
+
+      // 👇 institución
+      institucion_id: formData.institucion_id || null,
+      institucion_nombre: formData.institucion || "",
+
+      // 👇 anteproyecto
       titulo_proyecto: formData.tituloProyecto,
-      descripcion_problema: formData.justificacion,
+      descripcion_problema: formData.justificacion, // ✅ tu BD usa descripcion_problema
       objetivo_general: formData.objetivoGeneral,
+
+      // legacy (si querés seguirlo guardando en solicitudes, opcional)
       objetivos_especificos: formData.objetivosEspecificos,
+
       beneficiario: formData.beneficiarios,
       estrategia_solucion: formData.estrategiaSolucion,
+
+      // ✅ NUEVO: para tablas hijas (si ya metiste los steps nuevos)
+      objetivos_especificos_items: String(formData.objetivosEspecificos || "")
+        .split("\n")
+        .map((x) => x.trim())
+        .filter(Boolean),
+
+      cronograma_items: (formData.cronogramaItems || [])
+        .map((r) => ({
+          actividad: String(r.actividad || "").trim(),
+          tarea: String(r.tarea || "").trim(),
+          horas: String(r.horas || "").trim(),
+        }))
+        .filter((r) => r.actividad && r.tarea && r.horas !== ""),
+
+      // 👇 owner_email (si no lo sacás del token en backend, mandalo aquí por ahora)
+      owner_email: "esoto@ufidelitas.ac.cr", // DEMO (ideal: backend lo toma del token)
     };
 
     try {
       await addSolicitud(payload);
       showMessage("¡Solicitud de TCU enviada con éxito!", "success");
 
-      if (onCompleted) {
-        onCompleted();
-      }
+      if (onCompleted) onCompleted();
     } catch (err) {
       console.error("Error al enviar solicitud:", err);
       showMessage(
         "Ocurrió un error al enviar tu solicitud. Inténtalo de nuevo en unos minutos.",
-        "error"
+        "error",
       );
     }
   };
@@ -169,8 +296,10 @@ function StudentWizard({ onCompleted }) {
   const steps = [
     { id: 1, name: "Datos Personales", icon: LuUser },
     { id: 2, name: "Institución", icon: LuBuilding },
-    { id: 3, name: "Proyecto y objetivos", icon: LuTarget },
-    { id: 4, name: "Confirmación", icon: LuFileText },
+    { id: 3, name: "Proyecto", icon: LuTarget },
+    { id: 4, name: "Objetivos específicos", icon: LuFileText },
+    { id: 5, name: "Cronograma", icon: LuFileText },
+    { id: 6, name: "Confirmación", icon: LuFileText },
   ];
 
   const flashClasses =
@@ -244,7 +373,18 @@ function StudentWizard({ onCompleted }) {
         {currentStep === 3 && (
           <Step3_ProyectoU formData={formData} handleChange={handleChange} />
         )}
-        {currentStep === 4 && <Step4_Resumen formData={formData} />}
+        {currentStep === 4 && (
+          <Step4_ObjetivosEspecificos
+            formData={formData}
+            addObjetivo={addObjetivo}
+            removeObjetivo={removeObjetivo}
+            updateObjetivo={updateObjetivo}
+          />
+        )}
+        {currentStep === 5 && (
+          <Step5_Cronograma formData={formData} setFormData={setFormData} />
+        )}
+        {currentStep === 6 && <Step6_Resumen formData={formData} />}
       </div>
 
       {/* Footer del wizard */}
@@ -280,7 +420,7 @@ export default function StudentPortal() {
   // Cargar solicitud propia al entrar al portal
   useEffect(() => {
     fetchMySolicitud().catch((err) =>
-      console.error("Error cargando mi solicitud:", err)
+      console.error("Error cargando mi solicitud:", err),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -291,7 +431,7 @@ export default function StudentPortal() {
 
   const handleCompletedWizard = async () => {
     await fetchMySolicitud().catch((err) =>
-      console.error("Error recargando mi solicitud:", err)
+      console.error("Error recargando mi solicitud:", err),
     );
     setActiveTab("estado");
 
@@ -554,37 +694,141 @@ function OverviewSection({ mySolicitud, goToInscripcion, goToEstado }) {
    STEPS DEL WIZARD
    ============================================================ */
 
-function Step1_DatosPersonales({ formData }) {
+function Step1_DatosPersonales({ formData, handleChange }) {
   return (
     <div>
-      <h3 className="text-lg font-semibold mb-4">
+      <h3 className="text-lg font-semibold mb-6">
         Paso 1: Datos Personales y Académicos
       </h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <input
-          name="nombre"
-          value={formData.nombre}
-          type="text"
-          placeholder="Nombre Completo"
-          className="p-2 border rounded-md bg-slate-100 text-slate-700"
-          readOnly
-        />
-        <input
-          name="cedula"
-          value={formData.cedula}
-          type="text"
-          placeholder="Cédula"
-          className="p-2 border rounded-md bg-slate-100 text-slate-700"
-          readOnly
-        />
-        <input
-          name="carrera"
-          value={formData.carrera}
-          type="text"
-          placeholder="Carrera"
-          className="p-2 border rounded-md bg-slate-100 text-slate-700 md:col-span-2"
-          readOnly
-        />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        {/* Nombre */}
+        <div className="flex flex-col">
+          <label className="mb-1 font-medium text-slate-700">
+            Nombre Completo del estudiante
+          </label>
+          <input
+            name="nombre"
+            value={formData.nombre}
+            type="text"
+            className="p-2 border rounded-md bg-slate-100 text-slate-700"
+            readOnly
+          />
+        </div>
+
+        {/* Cédula */}
+        <div className="flex flex-col">
+          <label className="mb-1 font-medium text-slate-700">
+            Número de Identificación
+          </label>
+          <input
+            name="cedula"
+            value={formData.cedula}
+            type="text"
+            className="p-2 border rounded-md bg-slate-100 text-slate-700"
+            readOnly
+          />
+        </div>
+
+        {/* Carrera */}
+        <div className="flex flex-col md:col-span-2">
+          <label className="mb-1 font-medium text-slate-700">Carrera</label>
+          <input
+            name="carrera"
+            value={formData.carrera}
+            type="text"
+            className="p-2 border rounded-md bg-slate-100 text-slate-700"
+            readOnly
+          />
+        </div>
+
+        {/* Sede */}
+        <div className="flex flex-col">
+          <label className="mb-1 font-medium text-slate-700">Sede</label>
+          <input
+            name="sede"
+            value={formData.sede}
+            onChange={handleChange}
+            type="text"
+            placeholder="Ej: San Pedro"
+            className="p-2 border rounded-md"
+          />
+        </div>
+
+        {/* Correo */}
+        <div className="flex flex-col">
+          <label className="mb-1 font-medium text-slate-700">
+            Correo electrónico
+          </label>
+          <input
+            name="estudiante_email"
+            value={formData.estudiante_email}
+            onChange={handleChange}
+            type="email"
+            placeholder="correo@ufidelitas.ac.cr"
+            className="p-2 border rounded-md"
+          />
+        </div>
+
+        {/* Teléfono */}
+        <div className="flex flex-col">
+          <label className="mb-1 font-medium text-slate-700">
+            Número telefónico
+          </label>
+          <input
+            name="estudiante_phone"
+            value={formData.estudiante_phone}
+            onChange={handleChange}
+            type="tel"
+            placeholder="8888-8888"
+            className="p-2 border rounded-md"
+          />
+        </div>
+
+        {/* Oficio */}
+        <div className="flex flex-col">
+          <label className="mb-1 font-medium text-slate-700">Oficio</label>
+          <input
+            name="oficio"
+            value={formData.oficio}
+            onChange={handleChange}
+            type="text"
+            placeholder="Ej: Estudiante"
+            className="p-2 border rounded-md"
+          />
+        </div>
+
+        {/* Estado civil */}
+        <div className="flex flex-col">
+          <label className="mb-1 font-medium text-slate-700">
+            Estado Civil
+          </label>
+          <select
+            name="estado_civil"
+            value={formData.estado_civil}
+            onChange={handleChange}
+            className="p-2 border rounded-md"
+          >
+            <option value="">Seleccione</option>
+            <option value="Soltero">Soltero</option>
+            <option value="Casado">Casado</option>
+            <option value="Divorciado">Divorciado</option>
+            <option value="Viudo">Viudo</option>
+          </select>
+        </div>
+
+        {/* Domicilio */}
+        <div className="flex flex-col md:col-span-2">
+          <label className="mb-1 font-medium text-slate-700">Domicilio</label>
+          <input
+            name="domicilio"
+            value={formData.domicilio}
+            onChange={handleChange}
+            type="text"
+            placeholder="Dirección completa"
+            className="p-2 border rounded-md"
+          />
+        </div>
       </div>
     </div>
   );
@@ -599,37 +843,88 @@ function Step2_Institucion({
   onNotify,
 }) {
   const [showNewForm, setShowNewForm] = useState(false);
+  const [search, setSearch] = useState("");
+  const [tipoFilter, setTipoFilter] = useState("Todos");
+
+  // Nuevo registro
   const [newName, setNewName] = useState("");
+  const [newCedulaJuridica, setNewCedulaJuridica] = useState("");
+  const [newSupervisor, setNewSupervisor] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newType, setNewType] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const handleSelect = (e) => {
-    const id = e.target.value;
+  // 🔹 Opciones únicas del filtro tipo
+  const tipos = [
+    "Todos",
+    ...Array.from(
+      new Set(
+        (instituciones || []).map((i) => i.tipo_servicio).filter(Boolean),
+      ),
+    ),
+  ];
 
-    if (id === "__new__") {
-      setShowNewForm(true);
-      // limpiamos selección anterior
-      handleChange({ target: { name: "institucion_id", value: "" } });
-      handleChange({ target: { name: "institucion", value: "" } });
-      return;
-    }
+  // 🔹 Filtrado estilo tabla (nombre/cedula/supervisor/correo/tipo)
+  const filtered = (instituciones || []).filter((inst) => {
+    const q = search.trim().toLowerCase();
 
+    const bySearch =
+      !q ||
+      String(inst.nombre || "")
+        .toLowerCase()
+        .includes(q) ||
+      String(inst.cedula_juridica || "")
+        .toLowerCase()
+        .includes(q) ||
+      String(inst.supervisor_nombre || "")
+        .toLowerCase()
+        .includes(q) ||
+      String(inst.contacto_email || "")
+        .toLowerCase()
+        .includes(q) ||
+      String(inst.tipo_servicio || "")
+        .toLowerCase()
+        .includes(q);
+
+    const byTipo =
+      tipoFilter === "Todos" || String(inst.tipo_servicio || "") === tipoFilter;
+
+    return bySearch && byTipo;
+  });
+
+  const selectInstitution = (inst) => {
     setShowNewForm(false);
-    const inst = instituciones.find((i) => String(i.id) === String(id));
 
-    handleChange({ target: { name: "institucion_id", value: id } });
+    handleChange({ target: { name: "institucion_id", value: inst.id } });
+    handleChange({ target: { name: "institucion", value: inst.nombre } });
+
+    // (Opcional) si querés guardarlo en formData para mostrarlo después:
     handleChange({
-      target: { name: "institucion", value: inst ? inst.nombre : "" },
+      target: { name: "institucion_cedula", value: inst.cedula_juridica || "" },
+    });
+    handleChange({
+      target: {
+        name: "institucion_supervisor",
+        value: inst.supervisor_nombre || "",
+      },
+    });
+    handleChange({
+      target: { name: "institucion_correo", value: inst.contacto_email || "" },
     });
   };
 
   const handleSubmitNew = async () => {
-    if (!newName || !newEmail || !newType) {
+    if (
+      !newName ||
+      !newCedulaJuridica ||
+      !newSupervisor ||
+      !newEmail ||
+      !newType
+    ) {
       onNotify &&
         onNotify(
-          "Por favor, completá nombre, correo y tipo de servicio para la institución.",
-          "error"
+          "Por favor, completá nombre, cédula jurídica, supervisor, correo y tipo de servicio para la institución.",
+          "error",
         );
       return;
     }
@@ -638,6 +933,8 @@ function Step2_Institucion({
       setSaving(true);
       const res = await api.post("/instituciones/solicitar", {
         nombre: newName,
+        cedula_juridica: newCedulaJuridica,
+        supervisor_nombre: newSupervisor,
         contacto_email: newEmail,
         tipo_servicio: newType,
       });
@@ -647,23 +944,19 @@ function Step2_Institucion({
       onNotify &&
         onNotify(
           "Institución enviada para aprobación. Quedará en estado Pendiente para la coordinación.",
-          "success"
+          "success",
         );
 
-      if (onNewInstitution) {
-        onNewInstitution(nueva);
-      }
+      if (onNewInstitution) onNewInstitution(nueva);
 
-      // Dejamos seleccionada la institución recién creada en el formulario
-      handleChange({
-        target: { name: "institucion_id", value: nueva.id },
-      });
-      handleChange({
-        target: { name: "institucion", value: nueva.nombre },
-      });
+      // seleccionarla automáticamente
+      handleChange({ target: { name: "institucion_id", value: nueva.id } });
+      handleChange({ target: { name: "institucion", value: nueva.nombre } });
 
       setShowNewForm(false);
       setNewName("");
+      setNewCedulaJuridica("");
+      setNewSupervisor("");
       setNewEmail("");
       setNewType("");
     } catch (err) {
@@ -671,7 +964,7 @@ function Step2_Institucion({
       onNotify &&
         onNotify(
           "No se pudo registrar la institución. Intenta de nuevo o contacta a coordinación.",
-          "error"
+          "error",
         );
     } finally {
       setSaving(false);
@@ -684,38 +977,111 @@ function Step2_Institucion({
         Paso 2: Selección de Institución
       </h3>
 
-      {loading && (
-        <p className="text-sm text-slate-500 mb-3">
-          Cargando instituciones disponibles...
-        </p>
-      )}
+      {/* Barra superior */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="p-4 border-b border-slate-200 flex flex-col md:flex-row md:items-center gap-3">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nombre, cédula jurídica, supervisor o correo..."
+            className="p-2 border rounded-md w-full md:max-w-lg"
+          />
 
-      <select
-        name="institucion_select"
-        value={formData.institucion_id || ""}
-        onChange={handleSelect}
-        className="p-2 border rounded-md w-full mb-4"
-      >
-        <option value="">
-          {loading
-            ? "Cargando..."
-            : "Selecciona una institución habilitada desde la BD"}
-        </option>
-        {instituciones.map((inst) => (
-          <option key={inst.id} value={inst.id}>
-            {inst.nombre}
-          </option>
-        ))}
-        <option value="__new__">[NUEVA] Registrar otra institución</option>
-      </select>
+          <select
+            value={tipoFilter}
+            onChange={(e) => setTipoFilter(e.target.value)}
+            className="p-2 border rounded-md w-full md:w-64"
+          >
+            {tipos.map((x) => (
+              <option key={x} value={x}>
+                {x === "Todos" ? "Todos los tipos" : x}
+              </option>
+            ))}
+          </select>
 
-      {!loading && instituciones.length === 0 && !showNewForm && (
-        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
-          Aún no hay instituciones aprobadas en el sistema. Podés registrar una
-          nueva institución para que sea revisada.
-        </p>
-      )}
+          <div className="flex-1" />
 
+          <button
+            type="button"
+            onClick={() => setShowNewForm(true)}
+            className="px-4 py-2 text-xs bg-[rgba(2,14,159,1)] text-white rounded-md hover:bg-indigo-900"
+          >
+            No la encontré → Registrar
+          </button>
+        </div>
+
+        {/* Tabla */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-600">
+              <tr>
+                <th className="text-left p-3 border-b">Nombre institución</th>
+                <th className="text-left p-3 border-b">Cédula jurídica</th>
+                <th className="text-left p-3 border-b">Supervisor</th>
+                <th className="text-left p-3 border-b">Correo</th>
+                <th className="text-left p-3 border-b">Tipo de servicio</th>
+                <th className="text-left p-3 border-b">Acciones</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td className="p-4 text-slate-500" colSpan={6}>
+                    Cargando instituciones...
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td className="p-4 text-slate-500" colSpan={6}>
+                    No se encontraron instituciones con esos filtros. Podés
+                    registrar una nueva.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((inst) => (
+                  <tr key={inst.id} className="hover:bg-slate-50">
+                    <td className="p-3 border-b font-semibold text-slate-800">
+                      {inst.nombre}
+                    </td>
+                    <td className="p-3 border-b text-slate-600">
+                      {inst.cedula_juridica || "-"}
+                    </td>
+                    <td className="p-3 border-b text-slate-600">
+                      {inst.supervisor_nombre || "-"}
+                    </td>
+                    <td className="p-3 border-b text-slate-600">
+                      {inst.contacto_email || "-"}
+                    </td>
+                    <td className="p-3 border-b text-slate-600">
+                      {inst.tipo_servicio || "-"}
+                    </td>
+                    <td className="p-3 border-b">
+                      <button
+                        type="button"
+                        onClick={() => selectInstitution(inst)}
+                        className="text-[rgba(2,14,159,1)] font-semibold hover:underline"
+                      >
+                        Seleccionar
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Selección actual */}
+        <div className="p-4 bg-slate-50 border-t border-slate-200 text-sm">
+          <span className="font-semibold text-slate-800">Seleccionada: </span>
+          <span className="text-slate-600">
+            {formData.institucion || "Ninguna"}
+          </span>
+        </div>
+      </div>
+
+      {/* Formulario para registrar nueva */}
       {showNewForm && (
         <div className="mt-4 p-4 border border-slate-200 rounded-xl bg-slate-50 space-y-3 text-sm">
           <p className="font-semibold text-slate-800">
@@ -728,6 +1094,20 @@ function Step2_Institucion({
             className="w-full p-2 border rounded-md"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
+          />
+          <input
+            type="text"
+            placeholder="Cédula jurídica"
+            className="w-full p-2 border rounded-md"
+            value={newCedulaJuridica}
+            onChange={(e) => setNewCedulaJuridica(e.target.value)}
+          />
+          <input
+            type="text"
+            placeholder="Nombre del supervisor"
+            className="w-full p-2 border rounded-md"
+            value={newSupervisor}
+            onChange={(e) => setNewSupervisor(e.target.value)}
           />
           <input
             type="email"
@@ -770,9 +1150,7 @@ function Step2_Institucion({
 function Step3_ProyectoU({ formData, handleChange }) {
   return (
     <div>
-      <h3 className="text-lg font-semibold mb-4">
-        Paso 3: Datos del proyecto y objetivos
-      </h3>
+      <h3 className="text-lg font-semibold mb-4">Paso 3: Datos del proyecto</h3>
       <div className="space-y-4 text-sm">
         <textarea
           name="tituloProyecto"
@@ -796,13 +1174,6 @@ function Step3_ProyectoU({ formData, handleChange }) {
           className="w-full p-2 border rounded-md h-16"
         />
         <textarea
-          name="objetivosEspecificos"
-          value={formData.objetivosEspecificos}
-          onChange={handleChange}
-          placeholder="Objetivos específicos (puedes separarlos por líneas)"
-          className="w-full p-2 border rounded-md h-20"
-        />
-        <textarea
           name="beneficiarios"
           value={formData.beneficiarios}
           onChange={handleChange}
@@ -821,31 +1192,254 @@ function Step3_ProyectoU({ formData, handleChange }) {
   );
 }
 
-function Step4_Resumen({ formData }) {
+function Step4_ObjetivosEspecificos({
+  formData,
+  addObjetivo,
+  removeObjetivo,
+  updateObjetivo,
+}) {
+  const items = formData.objetivosEspecificosItems || [""];
+
   return (
     <div>
       <h3 className="text-lg font-semibold mb-4">
-        Paso 4: Confirmación rápida
+        Paso 4: Objetivos específicos
       </h3>
+
+      <p className="text-sm text-slate-600 mb-3">
+        Agregá tus objetivos específicos uno por uno. Podés agregar los que
+        necesités.
+      </p>
+
+      <div className="space-y-3">
+        {items.map((obj, idx) => (
+          <div key={idx} className="flex gap-2 items-start">
+            <div className="flex-1">
+              <input
+                value={obj}
+                onChange={(e) => updateObjetivo(idx, e.target.value)}
+                placeholder={`Objetivo específico #${idx + 1}`}
+                className="w-full p-2 border rounded-md text-sm"
+              />
+              {!obj.trim() && (
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Escribí un objetivo para poder guardarlo.
+                </p>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => removeObjetivo(idx)}
+              disabled={items.length === 1}
+              className="px-3 py-2 text-xs bg-slate-200 rounded-md disabled:opacity-50 hover:bg-slate-300"
+              title="Quitar"
+            >
+              Quitar
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex justify-end mt-4">
+        <button
+          type="button"
+          onClick={addObjetivo}
+          className="px-4 py-2 text-xs bg-[rgba(2,14,159,1)] text-white rounded-md hover:bg-indigo-900"
+        >
+          + Agregar objetivo
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Step5_Cronograma({ formData, setFormData }) {
+  const items = formData.cronogramaItems || [
+    { actividad: "", tarea: "", horas: "" },
+  ];
+
+  const addRow = () => {
+    setFormData((prev) => ({
+      ...prev,
+      cronogramaItems: [...items, { actividad: "", tarea: "", horas: "" }],
+    }));
+  };
+
+  const removeRow = (idx) => {
+    setFormData((prev) => {
+      const next = [...items];
+      next.splice(idx, 1);
+      return {
+        ...prev,
+        cronogramaItems: next.length
+          ? next
+          : [{ actividad: "", tarea: "", horas: "" }],
+      };
+    });
+  };
+
+  const updateRow = (idx, field, value) => {
+    setFormData((prev) => {
+      const next = [...items];
+      next[idx] = { ...next[idx], [field]: value };
+      return { ...prev, cronogramaItems: next };
+    });
+  };
+
+  return (
+    <div>
+      <h3 className="text-lg font-semibold mb-4">Paso 5: Cronograma</h3>
+
+      <p className="text-sm text-slate-600 mb-3">
+        Agregá actividades, tareas y horas estimadas.
+      </p>
+
+      <div className="overflow-x-auto border rounded-xl">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50">
+            <tr className="text-left">
+              <th className="p-3 border-b">Actividad</th>
+              <th className="p-3 border-b">Tarea</th>
+              <th className="p-3 border-b w-28">Horas</th>
+              <th className="p-3 border-b w-24"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((row, idx) => (
+              <tr key={idx} className="bg-white">
+                <td className="p-2 border-b">
+                  <input
+                    className="w-full p-2 border rounded-md"
+                    value={row.actividad}
+                    onChange={(e) =>
+                      updateRow(idx, "actividad", e.target.value)
+                    }
+                    placeholder="Ej: Diagnóstico"
+                  />
+                </td>
+                <td className="p-2 border-b">
+                  <input
+                    className="w-full p-2 border rounded-md"
+                    value={row.tarea}
+                    onChange={(e) => updateRow(idx, "tarea", e.target.value)}
+                    placeholder="Ej: Recolección de información"
+                  />
+                </td>
+                <td className="p-2 border-b">
+                  <input
+                    className="w-full p-2 border rounded-md"
+                    value={row.horas}
+                    onChange={(e) => updateRow(idx, "horas", e.target.value)}
+                    placeholder="10"
+                    inputMode="numeric"
+                  />
+                </td>
+                <td className="p-2 border-b text-right">
+                  <button
+                    type="button"
+                    onClick={() => removeRow(idx)}
+                    disabled={items.length === 1}
+                    className="px-3 py-2 text-xs bg-slate-200 rounded-md disabled:opacity-50 hover:bg-slate-300"
+                  >
+                    Quitar
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex justify-end mt-3">
+        <button
+          type="button"
+          onClick={addRow}
+          className="px-4 py-2 text-xs bg-[rgba(2,14,159,1)] text-white rounded-md hover:bg-indigo-900"
+        >
+          + Agregar fila
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Step6_Resumen({ formData }) {
+  // ✅ lee del array dinámico
+  const objetivosItems = (formData.objetivosEspecificosItems || [])
+    .map((x) => String(x || "").trim())
+    .filter(Boolean);
+
+  const cronogramaItems = (formData.cronogramaItems || []).filter(
+    (r) => r.actividad || r.tarea || r.horas,
+  );
+
+  return (
+    <div>
+      <h3 className="text-lg font-semibold mb-4">Paso 6: Confirmación</h3>
+
       <p className="text-sm text-slate-600 mb-3">
         Al finalizar se enviará tu anteproyecto para revisión. Podrás seguir su
         estado desde el panel “Estado del anteproyecto”.
       </p>
-      <ul className="text-sm text-slate-700 space-y-1 list-disc list-inside">
-        <li>Institución: {formData.institucion || "No seleccionada"}</li>
-        <li>Título: {formData.tituloProyecto || "Sin título"}</li>
-        <li>Justificación: {formData.justificacion || "Sin objetivo"}</li>
-        <li>Objetivo general: {formData.objetivoGeneral || "Sin objetivo"}</li>
-        <li>
-          Objetivos específicos:{" "}
-          {formData.objetivosEspecificos || "Sin objetivo"}
-        </li>
-        <li>Beneficiario: {formData.beneficiarios || "Sin objetivo"}</li>
-        <li>
-          Estrategia de solución:{" "}
-          {formData.estrategiaSolucion || "Sin objetivo"}
-        </li>
-      </ul>
+
+      <div className="space-y-4 text-sm text-slate-700">
+        <div className="bg-white border rounded-xl p-4">
+          <p className="font-semibold mb-2">Datos principales</p>
+          <ul className="space-y-1 list-disc list-inside">
+            <li>Institución: {formData.institucion || "No seleccionada"}</li>
+            <li>Título: {formData.tituloProyecto || "Sin título"}</li>
+            <li>
+              Descripción del problema:{" "}
+              {formData.justificacion || "Sin descripción"}
+            </li>
+            <li>
+              Objetivo general: {formData.objetivoGeneral || "Sin objetivo"}
+            </li>
+            <li>Beneficiarios: {formData.beneficiarios || "Sin dato"}</li>
+            <li>
+              Estrategia de solución:{" "}
+              {formData.estrategiaSolucion || "Sin dato"}
+            </li>
+          </ul>
+        </div>
+
+        <div className="bg-white border rounded-xl p-4">
+          <p className="font-semibold mb-2">Objetivos específicos</p>
+          {objetivosItems.length ? (
+            <ul className="space-y-1 list-disc list-inside">
+              {objetivosItems.map((x, i) => (
+                <li key={i}>{x}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-slate-500">
+              No agregaste objetivos específicos.
+            </p>
+          )}
+        </div>
+
+        <div className="bg-white border rounded-xl p-4">
+          <p className="font-semibold mb-2">Cronograma</p>
+          {cronogramaItems.length ? (
+            <ul className="space-y-1 list-disc list-inside">
+              {cronogramaItems.map((r, i) => (
+                <li key={i}>
+                  <span className="font-semibold">
+                    {r.actividad || "Actividad"}
+                  </span>
+                  {" — "}
+                  {r.tarea || "Tarea"}
+                  {" — "}
+                  {r.horas || "0"} horas
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-slate-500">No agregaste filas de cronograma.</p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
