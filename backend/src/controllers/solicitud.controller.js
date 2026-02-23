@@ -1,3 +1,4 @@
+// src/controllers/solicitud.controller.js
 const pool = require("../config/db");
 
 function generateCodigo() {
@@ -10,13 +11,13 @@ function toDateOnly(dateStr) {
   try {
     return new Date(dateStr).toISOString().slice(0, 10);
   } catch (e) {
-    console.error("Error normalizando fecha vencimiento:", e);
-    return dateStr;
+    console.error("Error normalizando fecha:", e);
+    return null;
   }
 }
 
 /**
-  Estudiante: obtener MIS solicitudes
+ * Estudiante: obtener MIS solicitudes
  */
 async function getMySolicitudes(req, res) {
   try {
@@ -38,7 +39,7 @@ async function getMySolicitudes(req, res) {
 }
 
 /**
-  Admin: obtener TODAS las solicitudes
+ * Admin: obtener TODAS las solicitudes
  */
 async function getAllSolicitudes(req, res) {
   try {
@@ -55,15 +56,13 @@ async function getAllSolicitudes(req, res) {
 }
 
 /**
-  Crear solicitud (Estudiante)
-  ✅ Alineado a BD:
-   - solicitudes.descripcion_problema
-   - guarda objetivos en solicitud_objetivos_especificos
-   - guarda cronograma en solicitud_cronograma
+ * Crear solicitud (Estudiante)
+ * - usa solicitudes.descripcion_problema
+ * - guarda objetivos en solicitud_objetivos_especificos
+ * - guarda cronograma en solicitud_cronograma
  */
 async function createSolicitud(req, res) {
   const {
-    // snapshot del estudiante
     estudiante_nombre,
     estudiante_cedula,
     carrera,
@@ -75,11 +74,9 @@ async function createSolicitud(req, res) {
     domicilio,
     lugar_trabajo,
 
-    // institución
     institucion_id,
     institucion_nombre,
 
-    // anteproyecto
     titulo_proyecto,
     descripcion_problema,
     justificacion, // compat
@@ -92,16 +89,16 @@ async function createSolicitud(req, res) {
     prioridad,
     vencimiento,
 
-    // dueño
     owner_email: ownerEmailBody,
     owner_user_id: ownerUserIdBody,
 
-    // tablas hijas
     objetivos_especificos_items,
     cronograma_items,
   } = req.body;
 
-  const descProblema = (descripcion_problema || justificacion || "").trim();
+  const descProblema = String(
+    descripcion_problema || justificacion || "",
+  ).trim();
 
   if (
     !institucion_nombre ||
@@ -111,7 +108,13 @@ async function createSolicitud(req, res) {
   ) {
     return res.status(400).json({
       message:
-        "institucion_nombre, descripcion_problema (o justificacion), objetivo_general y vencimiento son requeridos",
+        "Faltan campos requeridos: institucion_nombre, descripcion_problema (o justificacion), objetivo_general y vencimiento",
+      debug: {
+        institucion_nombre: !!institucion_nombre,
+        descProblema: !!descProblema,
+        objetivo_general: !!objetivo_general,
+        vencimiento: !!vencimiento,
+      },
     });
   }
 
@@ -187,7 +190,7 @@ async function createSolicitud(req, res) {
 
     const solicitudId = result.insertId;
 
-    // 2) Objetivos específicos
+    // 2) Objetivos específicos (tabla hija)
     const objetivosArr = Array.isArray(objetivos_especificos_items)
       ? objetivos_especificos_items
       : [];
@@ -196,13 +199,12 @@ async function createSolicitud(req, res) {
       .map((x) => String(x || "").trim())
       .filter(Boolean);
 
-    if (objetivosClean.length > 0) {
+    if (objetivosClean.length) {
       const values = objetivosClean.map((desc, i) => [
         solicitudId,
         i + 1,
         desc,
       ]);
-
       await conn.query(
         `INSERT INTO solicitud_objetivos_especificos (solicitud_id, orden, descripcion)
          VALUES ?`,
@@ -210,9 +212,8 @@ async function createSolicitud(req, res) {
       );
     }
 
-    // 3) Cronograma
+    // 3) Cronograma (tabla hija)
     const cronoArr = Array.isArray(cronograma_items) ? cronograma_items : [];
-
     const cronoClean = cronoArr
       .map((r) => ({
         actividad: String(r?.actividad || "").trim(),
@@ -221,7 +222,7 @@ async function createSolicitud(req, res) {
       }))
       .filter((r) => r.actividad && r.tarea && Number.isFinite(r.horas));
 
-    if (cronoClean.length > 0) {
+    if (cronoClean.length) {
       const values = cronoClean.map((r, i) => [
         solicitudId,
         i + 1,
@@ -237,7 +238,7 @@ async function createSolicitud(req, res) {
       );
     }
 
-    // 4) history
+    // 4) History
     await conn.query(
       `INSERT INTO solicitud_history (solicitud_id, accion, usuario, mensaje)
        VALUES (?,?,?,?)`,
@@ -245,7 +246,7 @@ async function createSolicitud(req, res) {
         solicitudId,
         "Solicitud creada y enviada",
         ownerEmail,
-        `Creación de anteproyecto. Objetivos: ${objetivosClean.length}, Cronograma: ${cronoClean.length}`,
+        `Objetivos: ${objetivosClean.length}, Cronograma: ${cronoClean.length}`,
       ],
     );
 
@@ -254,7 +255,6 @@ async function createSolicitud(req, res) {
     const [rows] = await pool.query("SELECT * FROM solicitudes WHERE id = ?", [
       solicitudId,
     ]);
-
     res.status(201).json(rows[0]);
   } catch (err) {
     await conn.rollback();
@@ -280,7 +280,7 @@ async function getSolicitudDetalle(req, res) {
       [id],
     );
 
-    if (solRows.length === 0) {
+    if (!solRows.length) {
       return res.status(404).json({ message: "Solicitud no encontrada" });
     }
 
@@ -308,7 +308,7 @@ async function getSolicitudDetalle(req, res) {
       [id],
     );
 
-    return res.json({
+    res.json({
       solicitud: solRows[0],
       objetivos,
       cronograma,
@@ -316,13 +316,10 @@ async function getSolicitudDetalle(req, res) {
     });
   } catch (err) {
     console.error("Error getSolicitudDetalle:", err);
-    return res.status(500).json({ message: "Error en el servidor" });
+    res.status(500).json({ message: "Error en el servidor" });
   }
 }
 
-/**
-  Actualizar estado (Admin)
- */
 async function updateStatus(req, res) {
   const { id } = req.params;
   const { status, observation } = req.body;
@@ -354,9 +351,6 @@ async function updateStatus(req, res) {
   }
 }
 
-/**
-  Asignar revisor (Admin)
- */
 async function assignReviewer(req, res) {
   const { id } = req.params;
   const { reviewerEmail } = req.body;
@@ -398,7 +392,7 @@ module.exports = {
   getMySolicitudes,
   getAllSolicitudes,
   createSolicitud,
-  getSolicitudDetalle, // ✅
+  getSolicitudDetalle,
   updateStatus,
   assignReviewer,
 };
