@@ -1,5 +1,32 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LuX } from "react-icons/lu";
+import api from "../api/apiClient";
+import { useSolicitudes } from "../contexts/SolicitudContext";
+
+const TABS = [
+  { id: "estudiante", label: "Estudiante" },
+  { id: "institucion", label: "Institución" },
+  { id: "proyecto", label: "Proyecto" },
+  { id: "objetivos", label: "Objetivos" },
+  { id: "cronograma", label: "Cronograma" },
+];
+
+function Field({ label, value }) {
+  return (
+    <div className="text-xs md:text-sm text-slate-700">
+      <span className="font-semibold">{label}: </span>
+      {value ?? "—"}
+    </div>
+  );
+}
+
+function Box({ children }) {
+  return (
+    <div className="px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs md:text-sm text-slate-700">
+      {children}
+    </div>
+  );
+}
 
 export default function SolicitudModal({
   isOpen,
@@ -9,53 +36,165 @@ export default function SolicitudModal({
   onReject,
   onReturn,
 }) {
+  const { fetchSolicitudDetalle } = useSolicitudes();
+
   const [observation, setObservation] = useState("");
+  const [activeTab, setActiveTab] = useState("estudiante");
+
+  const [detalle, setDetalle] = useState(null);
+  const [loadingDetalle, setLoadingDetalle] = useState(false);
+  const [errorDetalle, setErrorDetalle] = useState("");
+
+  const [institucionDetalle, setInstitucionDetalle] = useState(null);
+
+  const canRender = isOpen && !!solicitudData;
+  const internalId = solicitudData?._raw?.id ?? solicitudData?.id;
 
   useEffect(() => {
-    if (isOpen) setObservation("");
-  }, [isOpen, solicitudData]);
+    if (!canRender) return;
+    setObservation("");
+    setActiveTab("estudiante");
+    setErrorDetalle("");
+  }, [canRender]);
 
-  if (!isOpen || !solicitudData) return null;
+  useEffect(() => {
+    const loadDetalle = async () => {
+      if (!canRender || !internalId) return;
 
-  const legacyForm = solicitudData.formData || {};
+      setLoadingDetalle(true);
+      setErrorDetalle("");
 
-  const status = solicitudData.status || solicitudData.estado || "Enviado";
-  const idPublico = solicitudData.codigo_publico || solicitudData.id;
+      try {
+        const ui = await fetchSolicitudDetalle(internalId);
+        setDetalle(ui || null);
+      } catch (e) {
+        console.error("Error cargando detalle:", e);
+        setErrorDetalle(
+          "No se pudo cargar el detalle completo. Se mostrará la info disponible.",
+        );
+        setDetalle(null);
+      } finally {
+        setLoadingDetalle(false);
+      }
+    };
 
-  const nombre = legacyForm.nombre || solicitudData.estudiante_nombre || "";
-  const cedula = legacyForm.cedula || solicitudData.estudiante_cedula || "";
-  const carrera = legacyForm.carrera || solicitudData.carrera || "";
+    loadDetalle();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canRender, internalId]);
 
-  const institucion =
-    legacyForm.institucion || solicitudData.institucion_nombre || "";
+  useEffect(() => {
+    const loadInstitucion = async () => {
+      if (!canRender) return;
+
+      const s = detalle || solicitudData;
+      const institucionId = s?.institucion_id || s?.formData?.institucion_id;
+
+      if (!institucionId) {
+        setInstitucionDetalle(null);
+        return;
+      }
+
+      try {
+        const res = await api.get("/instituciones");
+        const list = Array.isArray(res.data) ? res.data : [];
+        const found = list.find((x) => String(x.id) === String(institucionId));
+        setInstitucionDetalle(found || null);
+      } catch (e) {
+        console.warn("No se pudo cargar instituciones:", e);
+        setInstitucionDetalle(null);
+      }
+    };
+
+    loadInstitucion();
+  }, [canRender, detalle, solicitudData]);
+
+  // ✅ Siempre define "s" de forma segura, aunque no renderice
+  const s = detalle || solicitudData || {};
+  const legacyForm = s.formData || {};
+
+  // ✅ Objetivos específicos (useMemo ANTES del return condicional)
+  const objetivosItems = useMemo(() => {
+    const arr =
+      (Array.isArray(s.objetivosEspecificosItems) &&
+        s.objetivosEspecificosItems) ||
+      (Array.isArray(legacyForm.objetivosEspecificosItems) &&
+        legacyForm.objetivosEspecificosItems) ||
+      [];
+
+    if (arr.length)
+      return arr.map((x) => String(x || "").trim()).filter(Boolean);
+
+    const legacyText =
+      legacyForm.objetivosEspecificos ||
+      s.objetivos_especificos ||
+      s.objetivosEspecificos ||
+      "";
+
+    return String(legacyText)
+      .split("\n")
+      .map((x) => x.trim())
+      .filter(Boolean);
+  }, [detalle, solicitudData]);
+
+  // ✅ Cronograma (useMemo ANTES del return condicional)
+  const cronogramaItems = useMemo(() => {
+    const arr =
+      (Array.isArray(s.cronogramaItems) && s.cronogramaItems) ||
+      (Array.isArray(legacyForm.cronogramaItems) &&
+        legacyForm.cronogramaItems) ||
+      [];
+
+    return arr
+      .map((r) => ({
+        actividad: String(r?.actividad || "").trim(),
+        tarea: String(r?.tarea || "").trim(),
+        horas: r?.horas ?? "",
+      }))
+      .filter((r) => r.actividad || r.tarea || String(r.horas).trim() !== "");
+  }, [detalle, solicitudData]);
+
+  // ✅ AHORA sí, return condicional (ya no rompe hooks)
+  if (!canRender) return null;
+
+  // ===== Variables normales (sin hooks) =====
+  const status = s.status || s.estado || "Enviado";
+  const idPublico = internalId;
+
+  // ===== Datos estudiante =====
+  const nombre = legacyForm.nombre || s.estudiante_nombre || "";
+  const cedula = legacyForm.cedula || s.estudiante_cedula || "";
+  const carrera = legacyForm.carrera || s.carrera || "";
+  const sede = legacyForm.sede || s.sede || "";
+  const estudiante_email =
+    legacyForm.estudiante_email || s.estudiante_email || "";
+  const estudiante_phone =
+    legacyForm.estudiante_phone || s.estudiante_phone || "";
+  const oficio = legacyForm.oficio || s.oficio || "";
+  const estado_civil = legacyForm.estado_civil || s.estado_civil || "";
+  const domicilio = legacyForm.domicilio || s.domicilio || "";
+  const lugar_trabajo = legacyForm.lugar_trabajo || s.lugar_trabajo || "";
+
+  // ===== Institución =====
+  const institucionNombre =
+    legacyForm.institucion || s.institucion_nombre || "";
+
+  // ===== Proyecto =====
+  const tituloProyecto =
+    legacyForm.tituloProyecto || s.tituloProyecto || s.titulo_proyecto || "";
 
   const justificacion =
-    legacyForm.justificacion || solicitudData.justificacion || "";
+    legacyForm.justificacion || s.descripcion_problema || s.justificacion || "";
 
   const objetivoGeneral =
-    legacyForm.objetivoGeneral || solicitudData.objetivo_general || "";
-
-  const objetivosEspecificos =
-    legacyForm.objetivosEspecificos ||
-    solicitudData.objetivos_especificos ||
-    "";
-
-  const tituloProyecto =
-    legacyForm.tituloProyecto ||
-    solicitudData.tituloProyecto ||
-    solicitudData.titulo_proyecto ||
-    "";
+    legacyForm.objetivoGeneral || s.objetivo_general || "";
 
   const beneficiarios =
-    legacyForm.beneficiarios ||
-    solicitudData.beneficiario ||
-    solicitudData.beneficiarios ||
-    "";
+    legacyForm.beneficiarios || s.beneficiario || s.beneficiarios || "";
 
   const estrategiaSolucion =
     legacyForm.estrategiaSolucion ||
-    solicitudData.estrategiaSolucion ||
-    solicitudData.estrategia_solucion ||
+    s.estrategiaSolucion ||
+    s.estrategia_solucion ||
     "";
 
   const handleReturnClick = () => {
@@ -103,7 +242,7 @@ export default function SolicitudModal({
               Revisión de anteproyecto
             </p>
             <h3 className="text-xl font-semibold text-slate-900">
-              Solicitud {idPublico}
+              Solicitud #{internalId}
             </h3>
           </div>
           <div className="flex items-center gap-3">
@@ -121,93 +260,227 @@ export default function SolicitudModal({
           </div>
         </div>
 
-        {/* BODY */}
-        <div className="px-7 py-5 space-y-5 max-h-[70vh] overflow-y-auto">
-          {/* Datos estudiante */}
-          <section>
-            <h4 className="text-sm font-semibold text-slate-900 mb-3">
-              Datos del estudiante
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs md:text-sm text-slate-700">
-              <div>
-                <span className="font-semibold">Nombre: </span>
-                {nombre || "—"}
-              </div>
-              <div>
-                <span className="font-semibold">Cédula: </span>
-                {cedula || "—"}
-              </div>
-              <div>
-                <span className="font-semibold">Carrera: </span>
-                {carrera || "—"}
-              </div>
-            </div>
-          </section>
+        {/* TABS */}
+        <div className="px-7 pt-4">
+          <div className="flex flex-wrap gap-2">
+            {TABS.map((t) => {
+              const active = activeTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setActiveTab(t.id)}
+                  className={[
+                    "px-4 py-2 rounded-xl text-xs md:text-sm font-semibold border transition",
+                    active
+                      ? "bg-slate-900 text-white border-slate-900"
+                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
+                  ].join(" ")}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
 
-          {/* Detalles del proyecto */}
-          <section className="pt-1">
-            <h4 className="text-sm font-semibold text-slate-900 mb-3">
-              Detalles del proyecto
-            </h4>
-            <div className="space-y-4 text-xs md:text-sm text-slate-700">
-              <div>
-                <span className="font-semibold">Institución: </span>
-                {institucion || "—"}
-              </div>
-
-              <div>
-                <p className="font-semibold mb-1">Título del proyecto</p>
-                <p className="px-3 py-2 bg-slate-50 rounded-xl border border-slate-200">
-                  {tituloProyecto || "Sin título registrado."}
+          {(loadingDetalle || errorDetalle) && (
+            <div className="mt-3">
+              {loadingDetalle && (
+                <p className="text-xs text-slate-500">
+                  Cargando detalle completo del anteproyecto...
                 </p>
+              )}
+              {errorDetalle && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                  {errorDetalle}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* BODY */}
+        <div className="px-7 py-5 space-y-5 max-h-[62vh] overflow-y-auto">
+          {/* TAB: Estudiante */}
+          {activeTab === "estudiante" && (
+            <section className="space-y-3">
+              <h4 className="text-sm font-semibold text-slate-900">
+                Datos del estudiante
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Field label="Nombre" value={nombre || "—"} />
+                <Field label="Cédula" value={cedula || "—"} />
+                <Field label="Carrera" value={carrera || "—"} />
+                <Field label="Sede" value={sede || "—"} />
+                <Field label="Correo" value={estudiante_email || "—"} />
+                <Field label="Teléfono" value={estudiante_phone || "—"} />
+                <Field label="Oficio" value={oficio || "—"} />
+                <Field label="Estado civil" value={estado_civil || "—"} />
+                <Field label="Domicilio" value={domicilio || "—"} />
+                <Field label="Lugar de trabajo" value={lugar_trabajo || "—"} />
+              </div>
+            </section>
+          )}
+
+          {/* TAB: Institución */}
+          {activeTab === "institucion" && (
+            <section className="space-y-3">
+              <h4 className="text-sm font-semibold text-slate-900">
+                Institución
+              </h4>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Field label="Nombre" value={institucionNombre || "—"} />
+                <Field
+                  label="Cédula jurídica"
+                  value={institucionDetalle?.cedula_juridica || "—"}
+                />
+                <Field
+                  label="Supervisor"
+                  value={institucionDetalle?.supervisor_nombre || "—"}
+                />
+                <Field
+                  label="Cargo"
+                  value={institucionDetalle?.supervisor_cargo || "—"}
+                />
+                <Field
+                  label="Correo supervisor"
+                  value={institucionDetalle?.supervisor_email || "—"}
+                />
+                <Field
+                  label="Tipo de servicio"
+                  value={institucionDetalle?.tipo_servicio || "—"}
+                />
+                <Field
+                  label="Estado institución"
+                  value={institucionDetalle?.estado || "—"}
+                />
+              </div>
+
+              {!institucionDetalle && (
+                <p className="text-xs text-slate-500">
+                  No se encontró detalle extra de la institución (igual se
+                  muestra el nombre guardado en la solicitud).
+                </p>
+              )}
+            </section>
+          )}
+
+          {/* TAB: Proyecto */}
+          {activeTab === "proyecto" && (
+            <section className="space-y-4">
+              <h4 className="text-sm font-semibold text-slate-900">Proyecto</h4>
+
+              <div>
+                <p className="font-semibold mb-1 text-xs md:text-sm">
+                  Título del proyecto
+                </p>
+                <Box>{tituloProyecto || "Sin título registrado."}</Box>
               </div>
 
               <div>
-                <p className="font-semibold mb-1">
+                <p className="font-semibold mb-1 text-xs md:text-sm">
                   Descripción del problema / Justificación
                 </p>
-                <p className="px-3 py-2 bg-slate-50 rounded-xl border border-slate-200">
-                  {justificacion || "Sin justificación registrada."}
-                </p>
+                <Box>{justificacion || "Sin justificación registrada."}</Box>
               </div>
 
               <div>
-                <p className="font-semibold mb-1">Objetivo general</p>
-                <p className="px-3 py-2 bg-slate-50 rounded-xl border border-slate-200">
-                  {objetivoGeneral || "Sin objetivo general registrado."}
-                </p>
-              </div>
-
-              <div>
-                <p className="font-semibold mb-1">Objetivos específicos</p>
-                <pre className="px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 font-sans whitespace-pre-wrap">
-                  {objetivosEspecificos ||
-                    "Sin objetivos específicos registrados."}
-                </pre>
-              </div>
-
-              <div>
-                <p className="font-semibold mb-1">
+                <p className="font-semibold mb-1 text-xs md:text-sm">
                   ¿A quién se beneficiará el proyecto?
                 </p>
-                <p className="px-3 py-2 bg-slate-50 rounded-xl border border-slate-200">
-                  {beneficiarios || "Sin beneficiarios registrados."}
-                </p>
+                <Box>{beneficiarios || "Sin beneficiarios registrados."}</Box>
               </div>
 
               <div>
-                <p className="font-semibold mb-1">
+                <p className="font-semibold mb-1 text-xs md:text-sm">
                   Estrategia y pertinencia de solución
                 </p>
-                <p className="px-3 py-2 bg-slate-50 rounded-xl border border-slate-200">
+                <Box>
                   {estrategiaSolucion ||
                     "Sin estrategia de solución registrada."}
-                </p>
+                </Box>
               </div>
-            </div>
-          </section>
+            </section>
+          )}
 
-          {/* Observaciones */}
+          {/* TAB: Objetivos */}
+          {activeTab === "objetivos" && (
+            <section className="space-y-4">
+              <h4 className="text-sm font-semibold text-slate-900">
+                Objetivos
+              </h4>
+
+              <div>
+                <p className="font-semibold mb-1 text-xs md:text-sm">
+                  Objetivo general
+                </p>
+                <Box>
+                  {objetivoGeneral || "Sin objetivo general registrado."}
+                </Box>
+              </div>
+
+              <div>
+                <p className="font-semibold mb-2 text-xs md:text-sm">
+                  Objetivos específicos
+                </p>
+
+                {objetivosItems.length ? (
+                  <div className="space-y-2">
+                    {objetivosItems.map((obj, idx) => (
+                      <Box key={idx}>
+                        <span className="font-semibold">{idx + 1}.</span> {obj}
+                      </Box>
+                    ))}
+                  </div>
+                ) : (
+                  <Box>Sin objetivos específicos registrados.</Box>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* TAB: Cronograma */}
+          {activeTab === "cronograma" && (
+            <section className="space-y-3">
+              <h4 className="text-sm font-semibold text-slate-900">
+                Cronograma
+              </h4>
+
+              {cronogramaItems.length ? (
+                <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                  <table className="min-w-full text-xs md:text-sm">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr className="text-left text-slate-600">
+                        <th className="px-4 py-3 font-semibold">#</th>
+                        <th className="px-4 py-3 font-semibold">Actividad</th>
+                        <th className="px-4 py-3 font-semibold">Tarea</th>
+                        <th className="px-4 py-3 font-semibold">Horas</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cronogramaItems.map((r, idx) => (
+                        <tr
+                          key={idx}
+                          className="border-b border-slate-200 last:border-b-0"
+                        >
+                          <td className="px-4 py-3 text-slate-500">
+                            {idx + 1}
+                          </td>
+                          <td className="px-4 py-3">{r.actividad || "—"}</td>
+                          <td className="px-4 py-3">{r.tarea || "—"}</td>
+                          <td className="px-4 py-3">{r.horas ?? "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <Box>Sin cronograma registrado.</Box>
+              )}
+            </section>
+          )}
+
+          {/* Observaciones (siempre visible) */}
           <section className="pt-1">
             <h4 className="text-sm font-semibold text-slate-900 mb-2">
               Observaciones del revisor

@@ -197,92 +197,34 @@ function StudentWizard({ onCompleted }) {
   };
 
   const handleNext = async () => {
-    // Ahora hay 6 steps
+    // Pasos 1-5: solo avanza
     if (currentStep < 6) {
       setFlash(null);
       setCurrentStep((prev) => prev + 1);
       return;
     }
 
-    // Validación mínima antes de enviar (podés endurecerla)
-    if (!formData.institucion_id || !formData.objetivoGeneral) {
-      showMessage(
-        "Por favor, selecciona una institución y escribe al menos el objetivo general.",
-        "error",
-      );
+    // Paso 6: validaciones mínimas
+    if (!formData.institucion_id || !formData.institucion) {
+      showMessage("Por favor, selecciona una institución.", "error");
       return;
     }
 
-    // ✅ Normalizar cronograma para BD
-    const cronograma_items = (formData.cronogramaItems || [])
-      .map((r) => ({
-        actividad: String(r.actividad || "").trim(),
-        tarea: String(r.tarea || "").trim(),
-        horas: String(r.horas || "").trim(),
-      }))
-      .filter((r) => r.actividad && r.tarea && r.horas !== "");
+    if (!String(formData.objetivoGeneral || "").trim()) {
+      showMessage("Por favor, escribe el objetivo general.", "error");
+      return;
+    }
 
-    // ✅ objetivos específicos como lista (si tu BD los guarda en tabla)
-    // si vos todavía lo manejás como texto, igual lo convertimos a array por líneas
-    const objetivos_especificos_items = String(
-      formData.objetivosEspecificos || "",
-    )
-      .split("\n")
-      .map((x) => x.trim())
-      .filter(Boolean);
-
-    const payload = {
-      // 👇 esto es lo que espera tu tabla solicitudes (snapshot del estudiante)
-      estudiante_nombre: formData.nombre,
-      estudiante_cedula: formData.cedula,
-      carrera: formData.carrera,
-
-      // si luego metés sede/email/teléfono/oficio/etc, los agregamos
-      sede: formData.sede || null,
-      estudiante_email: formData.estudiante_email || null,
-      estudiante_phone: formData.estudiante_phone || null,
-      oficio: formData.oficio || null,
-      estado_civil: formData.estado_civil || null,
-      domicilio: formData.domicilio || null,
-      lugar_trabajo: formData.lugar_trabajo || null,
-
-      // 👇 institución
-      institucion_id: formData.institucion_id || null,
-      institucion_nombre: formData.institucion || "",
-
-      // 👇 anteproyecto
-      titulo_proyecto: formData.tituloProyecto,
-      descripcion_problema: formData.justificacion, // ✅ tu BD usa descripcion_problema
-      objetivo_general: formData.objetivoGeneral,
-
-      // legacy (si querés seguirlo guardando en solicitudes, opcional)
-      objetivos_especificos: formData.objetivosEspecificos,
-
-      beneficiario: formData.beneficiarios,
-      estrategia_solucion: formData.estrategiaSolucion,
-
-      // ✅ NUEVO: para tablas hijas (si ya metiste los steps nuevos)
-      objetivos_especificos_items: String(formData.objetivosEspecificos || "")
-        .split("\n")
-        .map((x) => x.trim())
-        .filter(Boolean),
-
-      cronograma_items: (formData.cronogramaItems || [])
-        .map((r) => ({
-          actividad: String(r.actividad || "").trim(),
-          tarea: String(r.tarea || "").trim(),
-          horas: String(r.horas || "").trim(),
-        }))
-        .filter((r) => r.actividad && r.tarea && r.horas !== ""),
-
-      // 👇 owner_email (si no lo sacás del token en backend, mandalo aquí por ahora)
-      owner_email: "esoto@ufidelitas.ac.cr", // DEMO (ideal: backend lo toma del token)
-    };
+    if (!String(formData.justificacion || "").trim()) {
+      showMessage("Por favor, escribe la descripción del problema.", "error");
+      return;
+    }
 
     try {
-      await addSolicitud(payload);
-      showMessage("¡Solicitud de TCU enviada con éxito!", "success");
+      // ✅ manda el formData real (el Context lo convierte a payload)
+      await addSolicitud(formData);
 
+      showMessage("¡Solicitud de TCU enviada con éxito!", "success");
       if (onCompleted) onCompleted();
     } catch (err) {
       console.error("Error al enviar solicitud:", err);
@@ -292,6 +234,24 @@ function StudentWizard({ onCompleted }) {
       );
     }
   };
+
+  // ✅ Normalizar cronograma para BD
+  const cronograma_items = (formData.cronogramaItems || [])
+    .map((r) => ({
+      actividad: String(r.actividad || "").trim(),
+      tarea: String(r.tarea || "").trim(),
+      horas: String(r.horas || "").trim(),
+    }))
+    .filter((r) => r.actividad && r.tarea && r.horas !== "");
+
+  // ✅ objetivos específicos como lista (si tu BD los guarda en tabla)
+  // si vos todavía lo manejás como texto, igual lo convertimos a array por líneas
+  const objetivos_especificos_items = String(
+    formData.objetivosEspecificos || "",
+  )
+    .split("\n")
+    .map((x) => x.trim())
+    .filter(Boolean);
 
   const steps = [
     { id: 1, name: "Datos Personales", icon: LuUser },
@@ -1365,14 +1325,27 @@ function Step5_Cronograma({ formData, setFormData }) {
 }
 
 function Step6_Resumen({ formData }) {
-  // ✅ lee del array dinámico
-  const objetivosItems = (formData.objetivosEspecificosItems || [])
+  // ✅ Objetivos: primero intenta array dinámico, si no existe cae al legacy string (por líneas)
+  const objetivosItems = (
+    Array.isArray(formData.objetivosEspecificosItems)
+      ? formData.objetivosEspecificosItems
+      : String(formData.objetivosEspecificos || "")
+          .split("\n")
+          .map((x) => x.trim())
+  )
     .map((x) => String(x || "").trim())
     .filter(Boolean);
 
-  const cronogramaItems = (formData.cronogramaItems || []).filter(
-    (r) => r.actividad || r.tarea || r.horas,
-  );
+  // ✅ Cronograma: normaliza y filtra filas vacías
+  const cronogramaItems = (
+    Array.isArray(formData.cronogramaItems) ? formData.cronogramaItems : []
+  )
+    .map((r) => ({
+      actividad: String(r?.actividad || "").trim(),
+      tarea: String(r?.tarea || "").trim(),
+      horas: String(r?.horas ?? "").trim(),
+    }))
+    .filter((r) => r.actividad || r.tarea || r.horas);
 
   return (
     <div>
@@ -1406,10 +1379,11 @@ function Step6_Resumen({ formData }) {
 
         <div className="bg-white border rounded-xl p-4">
           <p className="font-semibold mb-2">Objetivos específicos</p>
+
           {objetivosItems.length ? (
             <ul className="space-y-1 list-disc list-inside">
               {objetivosItems.map((x, i) => (
-                <li key={i}>{x}</li>
+                <li key={`${i}-${x.slice(0, 20)}`}>{x}</li>
               ))}
             </ul>
           ) : (
@@ -1421,20 +1395,28 @@ function Step6_Resumen({ formData }) {
 
         <div className="bg-white border rounded-xl p-4">
           <p className="font-semibold mb-2">Cronograma</p>
+
           {cronogramaItems.length ? (
-            <ul className="space-y-1 list-disc list-inside">
-              {cronogramaItems.map((r, i) => (
-                <li key={i}>
-                  <span className="font-semibold">
-                    {r.actividad || "Actividad"}
-                  </span>
-                  {" — "}
-                  {r.tarea || "Tarea"}
-                  {" — "}
-                  {r.horas || "0"} horas
-                </li>
-              ))}
-            </ul>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+                <thead className="bg-slate-50 text-slate-700">
+                  <tr>
+                    <th className="text-left px-3 py-2 border-b">Actividad</th>
+                    <th className="text-left px-3 py-2 border-b">Tarea</th>
+                    <th className="text-left px-3 py-2 border-b">Horas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cronogramaItems.map((r, i) => (
+                    <tr key={i} className="border-b last:border-b-0">
+                      <td className="px-3 py-2">{r.actividad || "—"}</td>
+                      <td className="px-3 py-2">{r.tarea || "—"}</td>
+                      <td className="px-3 py-2">{r.horas || "0"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <p className="text-slate-500">No agregaste filas de cronograma.</p>
           )}
