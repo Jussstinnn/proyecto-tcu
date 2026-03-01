@@ -14,6 +14,9 @@ import {
 import { useSolicitudes } from "../contexts/SolicitudContext";
 import StudentStatusPage from "./StudentStatusPage";
 import api from "../api/apiClient";
+import { useAuth } from "../contexts/AuthContext.jsx";
+import { LuLogOut } from "react-icons/lu";
+import { useNavigate } from "react-router-dom";
 
 /* ============================================================
    FORM DATA INICIAL
@@ -376,6 +379,13 @@ export default function StudentPortal() {
   const [activeTab, setActiveTab] = useState("overview");
 
   const [globalFlash, setGlobalFlash] = useState(null);
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
   // Cargar solicitud propia al entrar al portal
   useEffect(() => {
@@ -386,8 +396,10 @@ export default function StudentPortal() {
   }, []);
 
   const displayName =
-    mySolicitud?.estudiante_nombre || "Estudiante Universidad Fidélitas";
-  const displayCareer = mySolicitud?.carrera || "Ingeniería de Software";
+    user?.nombre ||
+    mySolicitud?.estudiante_nombre ||
+    "Estudiante Universidad Fidélitas";
+  const displayCareer = user?.carrera || mySolicitud?.carrera || "TechSeed";
 
   const handleCompletedWizard = async () => {
     await fetchMySolicitud().catch((err) =>
@@ -439,6 +451,20 @@ export default function StudentPortal() {
             onClick={() => setActiveTab("estado")}
           />
         </nav>
+        <div className="p-4 border-t border-slate-200">
+          <button
+            onClick={() => {
+              logout();
+              // opcional: redirigir
+              window.location.href = "/login";
+            }}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl
+               bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
+          >
+            <LuLogOut className="text-lg" />
+            Cerrar sesión
+          </button>
+        </div>
 
         <div className="p-4 border-t border-slate-200 text-[11px] text-slate-400">
           Proyecto académico – Universidad Fidélitas

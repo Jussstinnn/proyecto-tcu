@@ -1,12 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   LuLayoutDashboard,
-  LuCalendar,
   LuTicket,
   LuFile,
   LuUsers,
   LuSettings,
+  LuUserCheck,
+  LuEye,
+  LuHand,
+  LuArrowRightLeft,
 } from "react-icons/lu";
+import { toast } from "sonner";
 import { useSolicitudes } from "../contexts/SolicitudContext";
 import SolicitudModal from "../components/SolicitudModal";
 
@@ -16,13 +20,15 @@ export default function AdminDashboard() {
     loading,
     fetchAllSolicitudes,
     updateSolicitudStatus,
-    assignReviewer,
+    takeSolicitud,
+    delegateSolicitud,
   } = useSolicitudes();
 
-  // Cargar solicitudes al entrar al dashboard
+  const myEmail = useMemo(() => getMyEmail(), []);
+
   useEffect(() => {
     fetchAllSolicitudes().catch((err) =>
-      console.error("Error cargando solicitudes:", err)
+      console.error("Error cargando solicitudes:", err),
     );
   }, []);
 
@@ -37,11 +43,11 @@ export default function AdminDashboard() {
   const [toDate, setToDate] = useState("");
   const [assignedFilter, setAssignedFilter] = useState("all");
 
-  // Lista de revisores
-  const reviewers = [
-    "admin.revisor@ufidelitas.ac.cr",
+  // ✅ lista de coordinadores (delegar)
+  const coordinators = [
+    "admin@heypoint.com.ar",
     "coordinacion.tcu@ufidelitas.ac.cr",
-    "revisor1@ufidelitas.ac.cr",
+    "coord2@ufidelitas.ac.cr",
   ];
 
   const openModal = (solicitud) => {
@@ -54,13 +60,12 @@ export default function AdminDashboard() {
     setIsModalOpen(false);
   };
 
-  // ID Interno
   const handleApprove = async (observation) => {
     if (!selectedSolicitud || !selectedSolicitud._raw) return;
     await updateSolicitudStatus(
       selectedSolicitud._raw.id,
       "Aprobado",
-      observation
+      observation,
     );
     closeModal();
   };
@@ -70,7 +75,7 @@ export default function AdminDashboard() {
     await updateSolicitudStatus(
       selectedSolicitud._raw.id,
       "Rechazado",
-      observation
+      observation,
     );
     closeModal();
   };
@@ -80,18 +85,48 @@ export default function AdminDashboard() {
     await updateSolicitudStatus(
       selectedSolicitud._raw.id,
       "Observado",
-      observation
+      observation,
     );
     closeModal();
   };
 
-  // Recibir ID Interno
-  const handleAssign = async (idInterno, reviewer) => {
-    if (!reviewer) return;
-    await assignReviewer(idInterno, reviewer);
+  // ✅ Toast tipo la imagen
+  const handleTake = async (idInterno) => {
+    const tId = toast.loading("Asignando caso...");
+    try {
+      await takeSolicitud(idInterno);
+      toast.success("Caso asignado ✅", { id: tId });
+      await fetchAllSolicitudes();
+    } catch (err) {
+      console.error("Error tomando solicitud:", err);
+      toast.error("No se pudo asignar el caso ❌", { id: tId });
+    }
   };
 
-  // ====== HELPERS PARA CLASES ======
+  const handleDelegate = async (ticket, newEmail) => {
+    if (!newEmail) return;
+
+    // ✅ regla: solo el dueño delega
+    if (
+      !ticket.assigned_to ||
+      String(ticket.assigned_to).toLowerCase() !== String(myEmail).toLowerCase()
+    ) {
+      toast.error("Solo el coordinador asignado puede delegar este caso.");
+      return;
+    }
+
+    const tId = toast.loading("Delegando caso...");
+    try {
+      await delegateSolicitud(ticket._raw.id, newEmail);
+      toast.success("Caso delegado ✅", { id: tId });
+      await fetchAllSolicitudes();
+    } catch (err) {
+      console.error("Error delegando solicitud:", err);
+      toast.error("No se pudo delegar el caso ❌", { id: tId });
+    }
+  };
+
+  // ====== HELPERS ======
   const getStatusClass = (estado) => {
     switch (estado) {
       case "Enviado":
@@ -128,7 +163,6 @@ export default function AdminDashboard() {
     return "bg-purple-100 text-purple-700";
   };
 
-  // Vencimiento formato
   const formatDue = (due) => {
     if (!due) return "-";
     const d = new Date(due);
@@ -140,7 +174,7 @@ export default function AdminDashboard() {
     });
   };
 
-  // ====== APLICAR FILTROS ======
+  // ====== FILTROS ======
   const filteredSolicitudes = solicitudes.filter((s) => {
     const searchText = search.toLowerCase();
 
@@ -185,7 +219,7 @@ export default function AdminDashboard() {
       s.status === "Enviado" ||
       s.status === "En Revisión" ||
       s.status === "Observado" ||
-      s.status === "Open"
+      s.status === "Open",
   ).length;
   const aprobadas = solicitudes.filter((s) => s.status === "Aprobado").length;
   const rechazadas = solicitudes.filter((s) => s.status === "Rechazado").length;
@@ -217,9 +251,17 @@ export default function AdminDashboard() {
               label="Instituciones"
               href="/instituciones"
             />
-            <SidebarItem icon={LuFile} label="Reportes" />
-            <SidebarItem icon={LuCalendar} label="Calendario" />
-            <SidebarItem icon={LuSettings} label="Configuración" />
+            <SidebarItem icon={LuFile} label="Reportes" href="/reportes" />
+            <SidebarItem
+              icon={LuUserCheck}
+              label="Coordinadores"
+              href="/coordinadores"
+            />
+            <SidebarItem
+              icon={LuSettings}
+              label="Configuración"
+              href="/settings"
+            />
           </nav>
 
           <div className="p-4 border-t border-slate-200 text-[11px] text-slate-500">
@@ -271,21 +313,18 @@ export default function AdminDashboard() {
               <SummaryCard title="Rechazadas" value={rechazadas} color="red" />
             </div>
 
-            {/* TABLA PRINCIPAL */}
+            {/* TABLA */}
             <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-              {/* Encabezado + filtros */}
               <div className="px-5 pt-4 pb-3 border-b border-slate-200 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <h2 className="text-sm font-semibold text-slate-900">
                     Solicitudes recibidas
                   </h2>
                   <p className="text-[11px] text-slate-500">
-                    Filtra por estudiante, estado, prioridad, revisor o rango de
-                    fechas.
+                    Filtra por estudiante, estado, prioridad o rango de fechas.
                   </p>
                 </div>
 
-                {/* BARRA DE FILTROS */}
                 <div className="flex flex-wrap gap-3">
                   <input
                     type="text"
@@ -348,7 +387,6 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {/* TABLA */}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500">
@@ -358,11 +396,12 @@ export default function AdminDashboard() {
                       <th className="p-3 text-left">Asunto</th>
                       <th className="p-3 text-left">Prioridad</th>
                       <th className="p-3 text-left">Estado</th>
-                      <th className="p-3 text-left">Revisor</th>
+                      <th className="p-3 text-left">Coordinador asignado</th>
                       <th className="p-3 text-left">Vencimiento</th>
                       <th className="p-3 text-left">Acción</th>
                     </tr>
                   </thead>
+
                   <tbody>
                     {loading && (
                       <tr>
@@ -376,76 +415,120 @@ export default function AdminDashboard() {
                     )}
 
                     {!loading &&
-                      filteredSolicitudes.map((ticket) => (
-                        <tr
-                          key={ticket._raw.id}
-                          className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
-                        >
-                          <td className="p-3 font-medium text-slate-800">
-                            {ticket.id}
-                          </td>
-                          <td className="p-3 text-slate-700">
-                            {ticket.formData?.nombre || ticket.req || "-"}
-                          </td>
-                          <td className="p-3 text-slate-700">{ticket.subj}</td>
-                          <td className="p-3">
-                            <span
-                              className={`px-3 py-1 rounded-full font-medium text-[11px] ${getPriorityClass(
-                                ticket.prio
-                              )}`}
-                            >
-                              {ticket.prio}
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            <span
-                              className={`px-3 py-1 rounded-full font-medium text-[11px] ${getStatusClass(
-                                ticket.status
-                              )}`}
-                            >
-                              {ticket.status}
-                            </span>
-                          </td>
-                          <td className="p-3 text-slate-700">
-                            <div className="flex flex-col gap-1">
+                      filteredSolicitudes.map((ticket) => {
+                        const isAssigned = !!ticket.assigned_to;
+                        const isMine =
+                          !!myEmail &&
+                          !!ticket.assigned_to &&
+                          String(ticket.assigned_to).toLowerCase() ===
+                            String(myEmail).toLowerCase();
+
+                        return (
+                          <tr
+                            key={ticket._raw.id}
+                            className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
+                          >
+                            <td className="p-3 font-medium text-slate-800">
+                              {ticket.id}
+                            </td>
+                            <td className="p-3 text-slate-700">
+                              {ticket.formData?.nombre || ticket.req || "-"}
+                            </td>
+                            <td className="p-3 text-slate-700">
+                              {ticket.subj}
+                            </td>
+                            <td className="p-3">
                               <span
-                                className={`inline-flex px-2 py-1 rounded-full text-[11px] font-medium ${getAssignedClass(
-                                  ticket.assigned_to
-                                )}`}
+                                className={`px-3 py-1 rounded-full font-medium text-[11px] ${getPriorityClass(ticket.prio)}`}
+                              >
+                                {ticket.prio}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <span
+                                className={`px-3 py-1 rounded-full font-medium text-[11px] ${getStatusClass(ticket.status)}`}
+                              >
+                                {ticket.status}
+                              </span>
+                            </td>
+
+                            <td className="p-3 text-slate-700">
+                              <span
+                                className={`inline-flex px-2 py-1 rounded-full text-[11px] font-medium ${getAssignedClass(ticket.assigned_to)}`}
                               >
                                 {ticket.assigned_to
                                   ? ticket.assigned_to
                                   : "Sin asignar"}
                               </span>
-                              <select
-                                value={ticket.assigned_to || ""}
-                                onChange={(e) =>
-                                  handleAssign(ticket._raw.id, e.target.value)
-                                }
-                                className="mt-1 border border-slate-300 rounded-lg px-2 py-1 text-[11px] text-slate-700"
-                              >
-                                <option value="">Asignar revisor...</option>
-                                {reviewers.map((rev) => (
-                                  <option key={rev} value={rev}>
-                                    {rev}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          </td>
-                          <td className="p-3 text-slate-700">
-                            {formatDue(ticket.due)}
-                          </td>
-                          <td className="p-3 text-slate-700">
-                            <button
-                              onClick={() => openModal(ticket)}
-                              className="text-[rgba(2,14,159,1)] hover:underline font-semibold text-xs"
-                            >
-                              Ver detalle
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+
+                            <td className="p-3 text-slate-700">
+                              {formatDue(ticket.due)}
+                            </td>
+
+                            <td className="p-3 text-slate-700">
+                              <div className="flex flex-wrap items-center gap-2">
+                                {/* Ver detalle */}
+                                <button
+                                  onClick={() => openModal(ticket)}
+                                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold"
+                                >
+                                  <LuEye className="text-base" />
+                                  Ver
+                                </button>
+
+                                {/* Tomar */}
+                                {!isAssigned && (
+                                  <button
+                                    onClick={() => handleTake(ticket._raw.id)}
+                                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#ffd600] hover:bg-yellow-300 text-slate-900 text-xs font-semibold"
+                                  >
+                                    <LuHand className="text-base" />
+                                    Tomar
+                                  </button>
+                                )}
+
+                                {/* Delegar */}
+                                {isMine && (
+                                  <div className="inline-flex items-center gap-2">
+                                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-semibold">
+                                      <LuArrowRightLeft className="text-base" />
+                                      Delegar
+                                    </div>
+
+                                    <select
+                                      defaultValue=""
+                                      onChange={(e) =>
+                                        handleDelegate(ticket, e.target.value)
+                                      }
+                                      className="border border-slate-300 rounded-xl px-2 py-1.5 text-xs text-slate-700 bg-white"
+                                    >
+                                      <option value="">A...</option>
+                                      {coordinators
+                                        .filter(
+                                          (c) =>
+                                            String(c).toLowerCase() !==
+                                            String(myEmail).toLowerCase(),
+                                        )
+                                        .map((c) => (
+                                          <option key={c} value={c}>
+                                            {c}
+                                          </option>
+                                        ))}
+                                    </select>
+                                  </div>
+                                )}
+
+                                <span className="w-full text-[11px] text-slate-500 mt-1">
+                                  {isAssigned
+                                    ? "Caso asignado"
+                                    : "Caso disponible"}
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
 
                     {!loading && filteredSolicitudes.length === 0 && (
                       <tr>
@@ -466,7 +549,6 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* MODAL DE SOLICITUD */}
       <SolicitudModal
         isOpen={isModalOpen}
         onClose={closeModal}
@@ -479,8 +561,26 @@ export default function AdminDashboard() {
   );
 }
 
-/* ========= SIDEBAR ITEM ========= */
+function getMyEmail() {
+  try {
+    const direct =
+      localStorage.getItem("user_email") ||
+      localStorage.getItem("email") ||
+      localStorage.getItem("auth_email");
+    if (direct) return direct;
 
+    const userRaw = localStorage.getItem("user");
+    if (userRaw) {
+      const user = JSON.parse(userRaw);
+      return user?.email || user?.correo || "";
+    }
+    return "";
+  } catch {
+    return "";
+  }
+}
+
+/* ========= SIDEBAR ITEM ========= */
 function SidebarItem({ icon: Icon, label, active = false, href = "#" }) {
   const base =
     "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-sm transition-colors";
@@ -497,7 +597,6 @@ function SidebarItem({ icon: Icon, label, active = false, href = "#" }) {
 }
 
 /* ========= SUMMARY CARD ========= */
-
 function SummaryCard({ title, value, color }) {
   const colors = {
     blue: "bg-blue-50 text-blue-700",

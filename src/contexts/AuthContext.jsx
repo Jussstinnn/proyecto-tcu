@@ -1,7 +1,8 @@
+// src/contexts/AuthContext.jsx
 import { createContext, useContext, useEffect, useState } from "react";
 import api from "../api/apiClient";
 
-const AuthContext = createContext();
+const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -25,10 +26,17 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = async (email, password) => {
-    const res = await api.post("/auth/login", { email, password });
+  // ✅ OTP DEMO
+  const requestOtp = async (email) => {
+    const res = await api.post("/auth/mock/request", { email });
+    return res.data;
+  };
+
+  const verifyOtp = async (email, code, nombre) => {
+    const res = await api.post("/auth/mock/verify", { email, code, nombre });
     localStorage.setItem("token", res.data.token);
     setUser(res.data.user);
+    return res.data.user;
   };
 
   const logout = () => {
@@ -37,12 +45,22 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        requestOtp,
+        verifyOtp,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth() {
-  return useContext(AuthContext);
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth debe usarse dentro de <AuthProvider />");
+  return ctx;
 }

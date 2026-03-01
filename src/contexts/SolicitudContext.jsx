@@ -24,7 +24,6 @@ function mapSolicitudFromApi(apiS) {
   const beneficiario = apiS.beneficiario || "";
   const estrategiaSolucion = apiS.estrategia_solucion || "";
 
-  // ✅ BD nueva
   const justificacion = apiS.descripcion_problema || apiS.justificacion || "";
 
   const subjectBase =
@@ -53,7 +52,6 @@ function mapSolicitudFromApi(apiS) {
     assigned_to: apiS.assigned_to || null,
     assign_date: apiS.assign_date || null,
 
-    // Datos del estudiante
     estudiante_nombre: apiS.estudiante_nombre || "",
     estudiante_cedula: apiS.estudiante_cedula || "",
     carrera: apiS.carrera || "",
@@ -73,13 +71,10 @@ function mapSolicitudFromApi(apiS) {
     estrategiaSolucion,
     objetivoGeneral,
 
-    // legacy
     objetivosEspecificos: apiS.objetivos_especificos || "",
 
-    // ✅ BD real
     justificacion,
 
-    // ✅ arrays (por defecto vacíos, se llenan con detalle)
     objetivosEspecificosItems: Array.isArray(apiS.objetivosEspecificosItems)
       ? apiS.objetivosEspecificosItems
       : [],
@@ -109,11 +104,7 @@ function mapSolicitudFromApi(apiS) {
       tituloProyecto,
       justificacion,
       objetivoGeneral,
-
-      // legacy
       objetivosEspecificos: apiS.objetivos_especificos || "",
-
-      // ✅ arrays
       objetivosEspecificosItems: Array.isArray(apiS.objetivosEspecificosItems)
         ? apiS.objetivosEspecificosItems
         : [],
@@ -133,7 +124,7 @@ function mapSolicitudFromApi(apiS) {
 function mapSolicitudDetalleFromApi(apiDetalle) {
   if (!apiDetalle) return null;
 
-  const base = apiDetalle.solicitud || apiDetalle; // por si viene plano
+  const base = apiDetalle.solicitud || apiDetalle;
   const ui = mapSolicitudFromApi(base);
 
   const objetivos = Array.isArray(apiDetalle.objetivos)
@@ -184,7 +175,26 @@ export function SolicitudProvider({ children }) {
   const [mySolicitud, setMySolicitud] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // ADMIN – todas las solicitudes
+  // ✅ NUEVO: email del coordinador (ajusta la key si tu app usa otra)
+  const getMyEmail = () => {
+    try {
+      const direct =
+        localStorage.getItem("user_email") ||
+        localStorage.getItem("email") ||
+        localStorage.getItem("auth_email");
+      if (direct) return direct;
+
+      const userRaw = localStorage.getItem("user");
+      if (userRaw) {
+        const user = JSON.parse(userRaw);
+        return user?.email || user?.correo || "";
+      }
+      return "";
+    } catch {
+      return "";
+    }
+  };
+
   const fetchAllSolicitudes = async () => {
     setLoading(true);
     try {
@@ -201,7 +211,6 @@ export function SolicitudProvider({ children }) {
     }
   };
 
-  // ESTUDIANTE – Mis solicitudes (solo tabla solicitudes)
   const fetchMySolicitud = async (emailDemo = "esoto@ufidelitas.ac.cr") => {
     setLoading(true);
     try {
@@ -221,7 +230,6 @@ export function SolicitudProvider({ children }) {
     }
   };
 
-  // ✅ NUEVO – Detalle completo (incluye objetivos/cronograma reales)
   const fetchSolicitudDetalle = async (id) => {
     if (!id) return null;
     setLoading(true);
@@ -229,12 +237,8 @@ export function SolicitudProvider({ children }) {
       const res = await api.get(`/solicitudes/${id}/detalle`);
       const ui = mapSolicitudDetalleFromApi(res.data);
 
-      // si es mi solicitud, la actualizamos con detalle
-      if (mySolicitud?.id === id) {
-        setMySolicitud(ui);
-      }
+      if (mySolicitud?.id === id) setMySolicitud(ui);
 
-      // si está en lista admin, también la actualizamos
       setSolicitudes((current) =>
         (current || []).map((s) => (s?.id === id ? ui : s)),
       );
@@ -248,7 +252,6 @@ export function SolicitudProvider({ children }) {
     }
   };
 
-  // ESTUDIANTE – Crear solicitud
   const addSolicitud = async (formData) => {
     setLoading(true);
     try {
@@ -291,26 +294,18 @@ export function SolicitudProvider({ children }) {
         institucion_nombre: formData.institucion || "",
 
         titulo_proyecto: formData.tituloProyecto || null,
-
-        // ✅ BD: descripcion_problema
         descripcion_problema: formData.justificacion || "",
 
         objetivo_general: formData.objetivoGeneral || "",
-
-        // legacy opcional (texto)
         objetivos_especificos: objetivosItems.join("\n"),
 
         beneficiario: formData.beneficiarios || null,
         estrategia_solucion: formData.estrategiaSolucion || null,
-
-        // ✅ tablas hijas
         objetivos_especificos_items: objetivosItems,
         cronograma_items: cronogramaItems,
 
-        // ✅ requerido por el backend
         vencimiento: formData.vencimiento || vencimientoPorDefecto,
 
-        // demo
         owner_email: "esoto@ufidelitas.ac.cr",
       };
 
@@ -329,7 +324,6 @@ export function SolicitudProvider({ children }) {
     }
   };
 
-  // ADMIN – Cambiar estado
   const updateSolicitudStatus = async (
     idInterno,
     newStatus,
@@ -360,7 +354,7 @@ export function SolicitudProvider({ children }) {
     }
   };
 
-  // ADMIN – Asignar Revisor
+  // ADMIN – Asignar (coordinador)
   const assignReviewer = async (idInterno, reviewerEmail) => {
     try {
       await api.patch(`/solicitudes/${idInterno}/assign`, { reviewerEmail });
@@ -370,10 +364,31 @@ export function SolicitudProvider({ children }) {
           s?.id === idInterno ? { ...s, assigned_to: reviewerEmail } : s,
         ),
       );
+
+      return reviewerEmail;
     } catch (err) {
       console.error("Error asignando revisor:", err);
       throw err;
     }
+  };
+
+  // ✅ NUEVO: Tomar solicitud usando tu endpoint existente /assign
+  const takeSolicitud = async (idInterno) => {
+    const myEmail = getMyEmail();
+    if (!myEmail) throw new Error("No se encontró el email del coordinador.");
+
+    // reutilizamos assignReviewer (mismo endpoint)
+    await assignReviewer(idInterno, myEmail);
+
+    // opcional: devolver el nuevo email asignado
+    return myEmail;
+  };
+
+  // ✅ NUEVO: Delegar solicitud usando /assign
+  const delegateSolicitud = async (idInterno, newCoordinatorEmail) => {
+    if (!newCoordinatorEmail) throw new Error("Email destino requerido.");
+    await assignReviewer(idInterno, newCoordinatorEmail);
+    return newCoordinatorEmail;
   };
 
   const getMySolicitud = () => mySolicitud;
@@ -389,7 +404,14 @@ export function SolicitudProvider({ children }) {
         fetchSolicitudDetalle,
         addSolicitud,
         updateSolicitudStatus,
+
+        // ✅ nuevos
+        takeSolicitud,
+        delegateSolicitud,
+
+        // ✅ existente
         assignReviewer,
+
         getMySolicitud,
       }}
     >

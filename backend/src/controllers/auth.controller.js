@@ -1,4 +1,4 @@
-// auth.controller.js
+// backend/src/controllers/auth.controller.js
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const pool = require("../config/db");
@@ -52,9 +52,7 @@ async function requestMockOtp(req, res) {
   try {
     const email = normalizeEmail(req.body.email);
 
-    if (!email) {
-      return res.status(400).json({ message: "email es requerido" });
-    }
+    if (!email) return res.status(400).json({ message: "email es requerido" });
     if (!validateInstitutionalEmail(email)) {
       return res.status(400).json({
         message: `Solo se permiten correos institucionales ${ALLOWED_DOMAIN}`,
@@ -136,7 +134,8 @@ async function verifyMockOtp(req, res) {
       const cedulaMock = "0-0000-0000";
       const oidMock = generateMockOid(email);
 
-      // ✅ IMPORTANTE: aquí metemos los campos NOT NULL para que no reviente
+      // ✅ IMPORTANTE: llenar campos NOT NULL para evitar 500
+      // Ajustado a tu tabla actual (email, nombre, cedula, microsoft_oid, role, is_active)
       const [result] = await pool.query(
         `INSERT INTO users (
           email,
@@ -159,7 +158,7 @@ async function verifyMockOtp(req, res) {
         microsoft_oid: oidMock,
       };
     } else {
-      // Si existe y viene nombre y está vacío, lo podemos actualizar
+      // Si existe y viene nombre y está vacío, lo actualizamos
       if (
         nombreInput &&
         (!user.nombre || String(user.nombre).trim().length === 0)
@@ -169,6 +168,16 @@ async function verifyMockOtp(req, res) {
           user.id,
         ]);
         user.nombre = nombreInput;
+      }
+
+      // Si existe pero no tiene oid (por si lo creaste manual), lo ponemos
+      if (!user.microsoft_oid) {
+        const oidMock = generateMockOid(email);
+        await pool.query("UPDATE users SET microsoft_oid = ? WHERE id = ?", [
+          oidMock,
+          user.id,
+        ]);
+        user.microsoft_oid = oidMock;
       }
     }
 
@@ -187,19 +196,18 @@ async function verifyMockOtp(req, res) {
     console.error("Error verifyMockOtp:", err);
     return res.status(500).json({
       message: "Error en el servidor",
-      error: err.message, // 👈 para que veás el motivo en consola/frontend si ocupa
+      error: err.message, // útil para debug
     });
   }
 }
 
 // ============================================================
-// TUS FUNCIONES EXISTENTES (register/login/me)
-// (las dejo tal cual, pero la app ya no las usará)
+// LEGACY (register/login/me) - opcional
 // ============================================================
 
-// POST /api/auth/register
+// POST /api/auth/register (legacy)
 async function register(req, res) {
-  const { nombre, email, password, cedula, carrera, role } = req.body;
+  const { nombre, email, password, cedula, carrera } = req.body;
 
   if (!nombre || !email || !password) {
     return res
@@ -208,18 +216,17 @@ async function register(req, res) {
   }
 
   try {
-    // verificar si ya existe
     const [existing] = await pool.query(
       "SELECT id FROM users WHERE email = ?",
       [email],
     );
-
     if (existing.length > 0) {
       return res.status(409).json({ message: "El email ya está registrado" });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
 
+    // OJO: si tu tabla users NO tiene password_hash/carrera, no uses register/login.
     const [result] = await pool.query(
       `INSERT INTO users (nombre, email, password_hash, cedula, carrera, role)
        VALUES (?,?,?,?,?,?)`,
@@ -229,7 +236,7 @@ async function register(req, res) {
         passwordHash,
         cedula || "0-0000-0000",
         carrera || null,
-        "STUDENT", // 👈 siempre estudiante
+        "STUDENT",
       ],
     );
 
@@ -237,25 +244,20 @@ async function register(req, res) {
       id: result.insertId,
       nombre,
       email,
-      role: "STUDENT", // 👈 fijo
+      role: "STUDENT",
     };
 
     const token = signToken(newUser);
-
-    res.status(201).json({
-      user: newUser,
-      token,
-    });
+    res.status(201).json({ user: newUser, token });
   } catch (err) {
     console.error("Error register:", err);
     res.status(500).json({ message: "Error en el servidor" });
   }
 }
 
-// POST /api/auth/login
+// POST /api/auth/login (legacy)
 async function login(req, res) {
   const { email, password } = req.body;
-
   if (!email || !password) {
     return res.status(400).json({ message: "email y password son requeridos" });
   }
@@ -264,16 +266,13 @@ async function login(req, res) {
     const [rows] = await pool.query("SELECT * FROM users WHERE email = ?", [
       email,
     ]);
-
     const user = rows[0];
-    if (!user) {
+    if (!user)
       return res.status(401).json({ message: "Credenciales inválidas" });
-    }
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
-    if (!isMatch) {
+    if (!isMatch)
       return res.status(401).json({ message: "Credenciales inválidas" });
-    }
 
     const token = signToken(user);
 
@@ -298,14 +297,13 @@ async function login(req, res) {
 async function me(req, res) {
   try {
     const [rows] = await pool.query(
-      "SELECT id, nombre, email, role, cedula, carrera, created_at FROM users WHERE id = ?",
+      "SELECT id, nombre, email, role, cedula, created_at FROM users WHERE id = ?",
       [req.user.id],
     );
 
     const user = rows[0];
-    if (!user) {
+    if (!user)
       return res.status(404).json({ message: "Usuario no encontrado" });
-    }
 
     res.json({ user });
   } catch (err) {
@@ -318,8 +316,6 @@ module.exports = {
   register,
   login,
   me,
-
-  // ✅ nuevos endpoints mock
   requestMockOtp,
   verifyMockOtp,
 };

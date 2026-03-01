@@ -1,3 +1,4 @@
+// src/pages/LoginPage.jsx
 import { useMemo, useState } from "react";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import { useNavigate } from "react-router-dom";
@@ -8,7 +9,7 @@ export default function LoginPage() {
 
   const [step, setStep] = useState(1); // 1=email, 2=otp
   const [email, setEmail] = useState("");
-  const [nombre, setNombre] = useState(""); // opcional para primer registro
+  const [nombre, setNombre] = useState("");
   const [code, setCode] = useState("");
 
   const [busy, setBusy] = useState(false);
@@ -20,8 +21,7 @@ export default function LoginPage() {
     return e.endsWith("@ufide.ac.cr");
   }, [email]);
 
-  const handleRequest = async (e) => {
-    e.preventDefault();
+  const handleMicrosoftClick = async () => {
     setErr("");
     setMsg("");
 
@@ -57,9 +57,10 @@ export default function LoginPage() {
     try {
       setBusy(true);
       const u = await verifyOtp(eclean, cclean, nombre.trim());
-      // Redirigir por rol
+
+      // 🔥 IMPORTANTE: tus rutas son /admin y /portal
       if (u?.role === "COORD") navigate("/admin");
-      else navigate("/student");
+      else navigate("/portal");
     } catch (error) {
       setErr(error?.response?.data?.message || "Código incorrecto o expirado.");
     } finally {
@@ -75,92 +76,122 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 p-6">
-      <div className="bg-white p-6 rounded-2xl shadow-md w-full max-w-sm space-y-4 border border-slate-200">
-        <div className="text-center">
-          <h1 className="text-xl font-semibold text-slate-900">
-            Iniciar sesión
+    <div className="min-h-screen flex items-center justify-center p-6 bg-[rgba(2,14,159,1)]">
+      <div className="w-full max-w-sm">
+        {/* “pantalla estilo U” */}
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-white/90 text-xs font-semibold">
+            TechSeed · TCU
+          </div>
+          <h1 className="text-white text-2xl font-extrabold mt-3">
+            Universidad Fidélitas
           </h1>
-          <p className="text-sm text-slate-500">
-            Acceso con correo institucional (modo demo)
+          <p className="text-white/80 text-sm mt-1">
+            Acceso institucional (modo demo)
           </p>
         </div>
 
-        {err && (
-          <div className="text-sm bg-red-50 text-red-700 border border-red-200 rounded-xl p-3">
-            {err}
-          </div>
-        )}
-        {msg && (
-          <div className="text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded-xl p-3">
-            {msg}
-          </div>
-        )}
+        <div className="bg-white rounded-2xl shadow-xl border border-white/30 p-6">
+          <h2 className="text-center text-lg font-bold text-slate-900">
+            Hola, Bienvenido a TechSeed
+          </h2>
+          <p className="text-center text-sm text-slate-500 mt-1">
+            Ingresá con tu correo institucional
+          </p>
 
-        {step === 1 ? (
-          <form onSubmit={handleRequest} className="space-y-3">
-            <input
-              type="email"
-              placeholder="Correo institucional (ej: esoto50484@ufide.ac.cr)"
-              className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-200"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-            />
-
-            <input
-              type="text"
-              placeholder="Nombre (opcional para primer ingreso)"
-              className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-200"
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
-            />
-
-            <button
-              disabled={busy}
-              className="w-full bg-[rgba(2,14,159,1)] text-white p-3 rounded-xl font-semibold disabled:opacity-60"
-            >
-              {busy ? "Enviando..." : "Enviar código"}
-            </button>
-
-            <p className="text-xs text-slate-500">
-              * En modo demo, el código se imprime en la consola del backend.
-            </p>
-          </form>
-        ) : (
-          <form onSubmit={handleVerify} className="space-y-3">
-            <div className="text-sm text-slate-700">
-              Código enviado a:{" "}
-              <span className="font-semibold">
-                {email.trim().toLowerCase()}
-              </span>
+          {err && (
+            <div className="mt-4 text-sm bg-red-50 text-red-700 border border-red-200 rounded-xl p-3">
+              {err}
             </div>
+          )}
+          {msg && (
+            <div className="mt-4 text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded-xl p-3">
+              {msg}
+            </div>
+          )}
 
-            <input
-              inputMode="numeric"
-              placeholder="Código de 6 dígitos"
-              className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-200 tracking-widest text-center text-lg"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              maxLength={6}
-            />
+          {step === 1 ? (
+            <div className="mt-5 space-y-3">
+              <input
+                type="email"
+                placeholder="Correo institucional (ej: esoto50484@ufide.ac.cr)"
+                className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-200"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+              />
 
-            <button
-              disabled={busy}
-              className="w-full bg-[rgba(2,14,159,1)] text-white p-3 rounded-xl font-semibold disabled:opacity-60"
-            >
-              {busy ? "Verificando..." : "Ingresar"}
-            </button>
+              <input
+                type="text"
+                placeholder="Nombre (opcional para primer ingreso)"
+                className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-200"
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+              />
 
-            <button
-              type="button"
-              onClick={backToEmail}
-              className="w-full p-3 rounded-xl font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50"
-            >
-              Cambiar correo
-            </button>
-          </form>
-        )}
+              <button
+                onClick={handleMicrosoftClick}
+                disabled={busy}
+                className="w-full border border-slate-300 rounded-xl p-3 flex items-center justify-center gap-2 hover:bg-slate-50 disabled:opacity-60"
+              >
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-slate-100">
+                  {/* “logo” simple tipo Microsoft */}
+                  <span className="grid grid-cols-2 gap-[2px]">
+                    <span className="w-[8px] h-[8px] bg-red-500 block" />
+                    <span className="w-[8px] h-[8px] bg-green-500 block" />
+                    <span className="w-[8px] h-[8px] bg-blue-500 block" />
+                    <span className="w-[8px] h-[8px] bg-yellow-400 block" />
+                  </span>
+                </span>
+
+                <span className="text-sm font-semibold text-slate-700">
+                  {busy ? "Enviando..." : "Correo institucional"}
+                </span>
+              </button>
+
+              <p className="text-[11px] text-slate-500">
+                * En modo demo, el código se imprime en la consola del backend.
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={handleVerify} className="mt-5 space-y-3">
+              <div className="text-sm text-slate-700">
+                Código enviado a:{" "}
+                <span className="font-semibold">
+                  {email.trim().toLowerCase()}
+                </span>
+              </div>
+
+              <input
+                inputMode="numeric"
+                placeholder="Código de 6 dígitos"
+                className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-200 tracking-widest text-center text-lg"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                maxLength={6}
+              />
+
+              <button
+                disabled={busy}
+                className="w-full bg-[rgba(2,14,159,1)] text-white p-3 rounded-xl font-semibold disabled:opacity-60"
+              >
+                {busy ? "Verificando..." : "Ingresar"}
+              </button>
+
+              <button
+                type="button"
+                onClick={backToEmail}
+                className="w-full p-3 rounded-xl font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50"
+              >
+                Cambiar correo
+              </button>
+            </form>
+          )}
+        </div>
+
+        <p className="text-center text-white/70 text-xs mt-4">
+          Proyecto académico — Universidad Fidélitas
+        </p>
       </div>
     </div>
   );
