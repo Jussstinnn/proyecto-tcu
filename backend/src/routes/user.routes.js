@@ -1,16 +1,20 @@
+// user.routes.js
 const express = require("express");
 const router = express.Router();
 const pool = require("../config/db");
 const { authRequired, coordOnly } = require("../middleware/auth.middleware");
 
-// Obtener usuario por email (lo dejé)
+// Obtener usuario por email
 router.get("/", async (req, res) => {
   const email = req.query.email;
   if (!email) return res.status(400).json({ message: "email requerido" });
 
   try {
     const [rows] = await pool.query(
-      `SELECT id, nombre, email, cedula, carrera, role FROM users WHERE email = ?`,
+      `SELECT id, nombre, email, cedula, carrera, role, sede, phone, oficio, estado_civil, domicilio, lugar_trabajo
+       FROM users
+       WHERE email = ?
+       LIMIT 1`,
       [email],
     );
 
@@ -21,11 +25,14 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ✅ (opcional) traer mi perfil desde el token
+// Traer mi perfil desde el token
 router.get("/me", authRequired, async (req, res) => {
   try {
     const [rows] = await pool.query(
-      `SELECT id, nombre, email, role FROM users WHERE id = ? LIMIT 1`,
+      `SELECT id, nombre, email, role, cedula, carrera, sede, phone, oficio, estado_civil, domicilio, lugar_trabajo
+       FROM users
+       WHERE id = ?
+       LIMIT 1`,
       [req.user.id],
     );
     res.json(rows[0] || null);
@@ -35,8 +42,57 @@ router.get("/me", authRequired, async (req, res) => {
   }
 });
 
+router.patch("/me", authRequired, async (req, res) => {
+  try {
+    const {
+      carrera,
+      sede,
+      phone,
+      oficio,
+      estado_civil,
+      domicilio,
+      lugar_trabajo,
+    } = req.body;
+
+    await pool.query(
+      `UPDATE users
+       SET carrera = ?,
+           sede = ?,
+           phone = ?,
+           oficio = ?,
+           estado_civil = ?,
+           domicilio = ?,
+           lugar_trabajo = ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [
+        carrera || null,
+        sede || null,
+        phone || null,
+        oficio || null,
+        estado_civil || null,
+        domicilio || null,
+        lugar_trabajo || null,
+        req.user.id,
+      ],
+    );
+
+    const [rows] = await pool.query(
+      `SELECT id, nombre, email, role, cedula, carrera, sede, phone, oficio, estado_civil, domicilio, lugar_trabajo
+       FROM users
+       WHERE id = ?
+       LIMIT 1`,
+      [req.user.id],
+    );
+
+    res.json(rows[0] || null);
+  } catch (err) {
+    console.error("Error patch user/me:", err);
+    res.status(500).json({ message: "Error en servidor" });
+  }
+});
+
 // ✅ cambiar rol (solo COORD)
-// PATCH /api/user/:id/role  body: { role: "COORD" | "STUDENT" }
 router.patch("/:id/role", authRequired, coordOnly, async (req, res) => {
   const { id } = req.params;
   const role = String(req.body.role || "")

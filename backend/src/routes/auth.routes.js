@@ -1,7 +1,5 @@
-// backend/src/routes/auth.routes.js
 const express = require("express");
 const router = express.Router();
-
 const {
   register,
   login,
@@ -20,7 +18,7 @@ router.post("/login", login);
 router.post("/mock/request", requestMockOtp);
 router.post("/mock/verify", verifyMockOtp);
 
-// Perfil
+// ✅ Perfil autenticado (token)
 router.get("/me", authRequired, me);
 
 module.exports = router;
