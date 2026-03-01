@@ -61,7 +61,7 @@ function StudentWizard({ onCompleted }) {
   const [loadingInstituciones, setLoadingInstituciones] = useState(false);
 
   // Mensaje tipo “toast” dentro del wizard
-  const [flash, setFlash] = useState(null); // { text, type: 'success' | 'error' }
+  const [flash, setFlash] = useState(null);
 
   const showMessage = (text, type = "success") => {
     setFlash({ text, type });
@@ -71,21 +71,25 @@ function StudentWizard({ onCompleted }) {
     }, 4000);
   };
 
-  /* === CARGAR DATOS DEL USUARIO DESDE BACKEND === */
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const res = await api.get("/user", {
-          params: { email: "esoto@ufidelitas.ac.cr" }, // DEMO
-        });
+        const res = await api.get("/user/me");
+        const u = res.data;
 
-        if (res.data) {
-          const user = res.data;
+        if (u) {
           setFormData((prev) => ({
             ...prev,
-            nombre: user.nombre || "",
-            cedula: user.cedula || "",
-            carrera: user.carrera || "",
+            nombre: u.nombre || "",
+            cedula: u.cedula || "",
+            carrera: u.carrera || "",
+            sede: u.sede || "",
+            estudiante_email: u.email || "",
+            estudiante_phone: u.phone || "",
+            oficio: u.oficio || "",
+            estado_civil: u.estado_civil || "",
+            domicilio: u.domicilio || "",
+            lugar_trabajo: u.lugar_trabajo || "",
           }));
         }
       } catch (err) {
@@ -98,7 +102,6 @@ function StudentWizard({ onCompleted }) {
     };
 
     loadUser();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* === CARGAR INSTITUCIONES APROBADAS === */
@@ -120,7 +123,6 @@ function StudentWizard({ onCompleted }) {
     };
 
     loadInstituciones();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* === HANDLERS === */
@@ -200,7 +202,25 @@ function StudentWizard({ onCompleted }) {
   };
 
   const handleNext = async () => {
-    // Pasos 1-5: solo avanza
+    if (currentStep === 1) {
+      try {
+        await api.patch("/user/me", {
+          carrera: formData.carrera,
+          sede: formData.sede,
+          phone: formData.estudiante_phone,
+          oficio: formData.oficio,
+          estado_civil: formData.estado_civil,
+          domicilio: formData.domicilio,
+          lugar_trabajo: formData.lugar_trabajo,
+        });
+      } catch (err) {
+        console.error("Error guardando perfil:", err);
+        showMessage("No se pudo guardar tu información personal.", "error");
+        return;
+      }
+    }
+
+    // Pasos 1-5: solo avanza (ya con perfil guardado)
     if (currentStep < 6) {
       setFlash(null);
       setCurrentStep((prev) => prev + 1);
@@ -224,7 +244,6 @@ function StudentWizard({ onCompleted }) {
     }
 
     try {
-      // ✅ manda el formData real (el Context lo convierte a payload)
       await addSolicitud(formData);
 
       showMessage("¡Solicitud de TCU enviada con éxito!", "success");
@@ -238,7 +257,6 @@ function StudentWizard({ onCompleted }) {
     }
   };
 
-  // ✅ Normalizar cronograma para BD
   const cronograma_items = (formData.cronogramaItems || [])
     .map((r) => ({
       actividad: String(r.actividad || "").trim(),
@@ -247,8 +265,6 @@ function StudentWizard({ onCompleted }) {
     }))
     .filter((r) => r.actividad && r.tarea && r.horas !== "");
 
-  // ✅ objetivos específicos como lista (si tu BD los guarda en tabla)
-  // si vos todavía lo manejás como texto, igual lo convertimos a array por líneas
   const objetivos_especificos_items = String(
     formData.objetivosEspecificos || "",
   )
@@ -722,9 +738,10 @@ function Step1_DatosPersonales({ formData, handleChange }) {
           <input
             name="carrera"
             value={formData.carrera}
+            onChange={handleChange}
             type="text"
-            className="p-2 border rounded-md bg-slate-100 text-slate-700"
-            readOnly
+            placeholder="Ej: Ingeniería en Desarrollo de Software"
+            className="p-2 border rounded-md"
           />
         </div>
 

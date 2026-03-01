@@ -86,9 +86,7 @@ export default function LoginPage() {
           <h1 className="text-white text-2xl font-extrabold mt-3">
             Universidad Fidélitas
           </h1>
-          <p className="text-white/80 text-sm mt-1">
-            Acceso institucional (modo demo)
-          </p>
+          <p className="text-white/80 text-sm mt-1">Acceso institucional</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl border border-white/30 p-6">
@@ -114,7 +112,7 @@ export default function LoginPage() {
             <div className="mt-5 space-y-3">
               <input
                 type="email"
-                placeholder="Correo institucional (ej: esoto50484@ufide.ac.cr)"
+                placeholder="Correo institucional (@ufide.ac.cr)"
                 className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-200"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -149,9 +147,7 @@ export default function LoginPage() {
                 </span>
               </button>
 
-              <p className="text-[11px] text-slate-500">
-                * En modo demo, el código se imprime en la consola del backend.
-              </p>
+              <p className="text-[11px] text-slate-500">Login de prueba</p>
             </div>
           ) : (
             <form onSubmit={handleVerify} className="mt-5 space-y-3">
