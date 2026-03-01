@@ -1,144 +1,120 @@
 # Estado de Implementación – Historias de Usuario
 
-**Proyecto:** Fidelitas TechSeed
-**Curso:** Diseño y Desarrollo de Sistemas
-**Repositorio:** https://github.com/Jussstinnn/proyecto-tcu
+**Proyecto:** Fidelitas TechSeed  
+**Curso:** Diseño y Desarrollo de Sistemas  
+**Repositorio:** https://github.com/Jussstinnn/proyecto-tcu  
 
 ---
 
 ## Introducción
 
-Este documento presenta el **estado actual de implementación de las Historias de Usuario (HU)** definidas para el proyecto de desarrollo de la plataforma web Fidelitas TechSeed.
+Este documento presenta el **estado actual de implementación de las Historias de Usuario (HU)** definidas para el proyecto Fidelitas TechSeed, actualizado tras la última reunión de alcance.
 
-Las historias de usuario se resumen en tres categorías:
+El sistema actualmente contempla:
+
+- Dos roles: **Estudiante** y **Coordinador**.
+- Generación automática de **PDF cada vez que el estudiante finaliza y envía su anteproyecto**.
+- Versionado automático del documento en cada corrección.
+- Generación de un **PDF final aprobado con código alfanumérico único visible como sello de validez**.
+- Trazabilidad mediante bitácora.
+- Funcionalidades de IA planificadas para la última fase del proyecto.
+
+Las historias de usuario se clasifican en tres categorías:
 
 - **Implementadas al 100%**
 - **Implementadas aproximadamente al 70%**
 - **Pendientes de implementación**
 
+Total actual: **15 Historias de Usuario**
+
 ---
 
 ## Historias de Usuario Implementadas al 100%
 
-Estas historias cuentan con **interfaz funcional, lógica implementada y flujo cerrado**, permitiendo su uso real dentro del sistema en el estado actual del proyecto.
+Estas historias cuentan con lógica funcional, integración con base de datos y flujo operativo completo dentro del sistema.
 
 ### Estudiante
 
-- **HU-01 – Crear anteproyecto TCU**  
-  Permite al estudiante registrar un anteproyecto mediante un formulario estructurado, almacenando correctamente la información en el sistema y habilitando su envío al proceso de revisión.
+- **HU-01 – Crear anteproyecto estructurado**  
+  Permite completar el anteproyecto mediante un formulario guiado por etapas, registrando correctamente la información en la base de datos.
 
-- **HU-02 – Editar y guardar anteproyecto**  
-  El estudiante puede modificar su anteproyecto, guardarlo como borrador y recuperar la información en sesiones posteriores sin pérdida de datos.
+- **HU-02 – Finalizar y generar PDF automático**  
+  Al presionar “Finalizar y enviar”, el sistema genera automáticamente un PDF con la información ingresada.
 
-- **HU-05 – Enviar anteproyecto a revisión**  
-  El estudiante puede enviar formalmente su anteproyecto al sistema, quedando registrado con estado inicial y confirmación de envío.
-
-- **HU-04 – Visualizar estado del anteproyecto**  
-  El estudiante puede consultar el estado actual de su anteproyecto (enviado, en revisión, aprobado o rechazado).
+- **HU-03 – Corrección con versionado automático**  
+  Permite corregir observaciones y generar una nueva versión del PDF, manteniendo el historial de versiones anteriores.
 
 ---
 
-### Revisor / Coordinador
+### Coordinador
 
-- **HU-06 – Visualizar listado general de anteproyectos**  
-  Dashboard funcional que permite listar anteproyectos registrados en el sistema, visualizar su estado y acceder a su información general.
+- **HU-07 – Bandeja general de anteproyectos**  
+  Permite visualizar todos los anteproyectos registrados con filtros por estado y fecha.
 
-- **HU-09 – Revisar anteproyecto**  
-  El personal revisor puede visualizar el contenido completo del anteproyecto enviado por el estudiante para su análisis y evaluación.
+- **HU-08 – Tomar voluntariamente un anteproyecto**  
+  Permite que un coordinador se asigne un caso disponible para su gestión.
 
 ---
 
 ## Historias de Usuario Implementadas ~70%
 
-Estas historias cuentan con **estructura funcional o lógica base**, pero no se encuentran completamente cerradas debido a la falta de interfaz final, automatizaciones, validaciones formales o dependencias institucionales.
+Estas funcionalidades cuentan con estructura base implementada, pero requieren mejoras visuales, automatización o cierre formal del flujo.
 
 ### Estudiante
 
-- **HU-03 – Autenticación de usuario**  
-  La lógica de autenticación (backend, validación y control de acceso) se encuentra implementada; sin embargo, el flujo visual completo y la experiencia de usuario aún no están totalmente integrados.
-
-- **HU-07 – Carga de documentos del anteproyecto**  
-  Permite la subida y almacenamiento básico de documentos, pero carece de visor integrado, control de versiones y validaciones formales.
-
-- **HU-13 – Corrección del anteproyecto según observaciones**  
-  Existe el flujo lógico para actualizar información, pero no está completamente integrado el ciclo formal de corrección y reenvío.
+- **HU-04 – Notificaciones con enlace directo**  
+  Existe la lógica de estados y observaciones, pero falta completar la notificación automática con enlace directo a la sección corregible.
 
 ---
 
-### Revisor / Coordinador
+### Coordinador
 
-- **HU-10 – Aprobar o rechazar anteproyecto**  
-  Incluye la lógica básica de cambio de estado del anteproyecto; sin embargo, faltan reglas formales, validaciones finales y control completo del proceso.
+- **HU-09 – Reasignar anteproyecto**  
+  Existe la base de asignación, pero requiere mejoras para mostrar claramente quién tiene cada caso y permitir reasignación fluida.
 
-- **HU-11 – Enviar observaciones al estudiante**  
-  Permite registrar observaciones visibles para el estudiante, pero no cuenta con notificaciones automáticas ni control del ciclo de respuesta.
+- **HU-10 – Bitácora completa por versión**  
+  La estructura de registro existe, pero falta trazabilidad detallada por versión generada del PDF.
 
-- **HU-22 – Visualizar anteproyectos asignados**  
-  Existe una estructura base para asignación, pero no se encuentra completamente implementada la vista filtrada por revisor.
+- **HU-12 – Recordatorios automáticos**  
+  Existe planificación de SLA, pero aún no está completamente automatizado.
 
----
+- **HU-13 – Plantillas institucionales**  
+  Funcionalidad definida pero pendiente implementación completa.
 
-### Sistema
-
-- **HU-14 – Registro de bitácora de cambios**  
-  Existe una estructura base para el registro de eventos del sistema; no obstante, no todos los escenarios ni acciones están cubiertos.
-
-- **HU-17 – Gestión básica de roles y permisos**  
-  Se cuenta con roles y validaciones en backend, pero sin una interfaz administrativa completa ni trazabilidad avanzada.
+- **HU-15 – Gestión básica de roles**  
+  Autenticación y control de roles implementados en backend, pendiente mejora visual y administrativa.
 
 ---
 
 ## Historias de Usuario Pendientes de Implementación
 
-Las siguientes historias no han sido desarrolladas o se mantienen únicamente a nivel de diseño debido a su alcance técnico, legal o institucional.
+Estas historias forman parte del alcance aprobado pero aún no han sido desarrolladas.
 
-### Estudiante
+### Coordinador
 
-- **HU-08 – Validación automática del anteproyecto mediante IA**  
-  No se ha implementado la validación automática basada en criterios académicos.
+- **HU-11 – Documento final aprobado con código alfanumérico**  
+  Pendiente implementación de generación automática del PDF final con código único visible como sello de validez.
 
-- **HU-16 – Asistente o chatbot de apoyo al estudiante**  
-  No se ha desarrollado un módulo de asistencia automatizada.
-
-- **HU-18 – Búsqueda de texto dentro de documentos PDF**  
-  No se cuenta con funcionalidad de búsqueda interna en documentos.
+- **HU-14 – Control de periodo académico**  
+  Pendiente implementación de habilitación/deshabilitación de generación de PDF según calendario activo.
 
 ---
 
-### Revisor / Coordinador
+### Estudiante (Sprint Final – IA)
 
-- **HU-12 – Plantillas estandarizadas de observaciones**  
-  No se ha implementado un sistema de plantillas reutilizables para observaciones.
+- **HU-05 – Validación IA de coherencia**  
+  No implementada.
 
-- **HU-19 – Plantillas específicas por carrera**  
-  No se han definido ni implementado plantillas personalizadas por carrera.
-
-- **HU-20 – Control de apertura y cierre del periodo de recepción**  
-  No se ha desarrollado el control de habilitación o bloqueo del sistema por fechas.
-
----
-
-### Sistema
-
-- **HU-15 – Notificaciones automáticas (correo / sistema)**  
-  No se cuenta con un sistema de notificaciones activas ante cambios de estado o eventos relevantes.
-
-- **HU-21 – Exportación de reportes y bitácoras**  
-  No se ha implementado la exportación de información en formatos como PDF o Excel.
-
-- **HU-23 – Validación de autenticidad de documentos aprobados**  
-  No se ha desarrollado la validación formal de documentos mediante código o verificación externa.
-
-- **HU-24 – Reportes y métricas administrativas**  
-  No se han desarrollado dashboards ni indicadores para la toma de decisiones administrativas.
+- **HU-06 – Chatbot de apoyo**  
+  No implementado.
 
 ---
 
 ## Resumen General
 
-| Estado de la HU                   | Cantidad |
-| --------------------------------- | -------- |
-| Completadas al 100%               | 6        |
-| Implementadas ~70%                | 8        |
-| Pendientes                        | 10       |
-| **Total de Historias de Usuario** | **24**   |
+| Estado de la HU | Cantidad |
+|-----------------|----------|
+| Completadas al 100% | 5 |
+| Implementadas ~70% | 6 |
+| Pendientes | 4 |
+| **Total de Historias de Usuario** | **15** |
