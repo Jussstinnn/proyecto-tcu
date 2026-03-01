@@ -1,3 +1,4 @@
+//backend/src/middleware/auth.middleware.js
 const jwt = require("jsonwebtoken");
 
 function authRequired(req, res, next) {
@@ -25,14 +26,14 @@ function authRequired(req, res, next) {
   }
 }
 
-function adminOnly(req, res, next) {
-  if (!req.user || req.user.role !== "ADMIN") {
-    return res.status(403).json({ message: "Requiere rol ADMIN" });
+function coordOnly(req, res, next) {
+  if (!req.user || req.user.role !== "COORD") {
+    return res.status(403).json({ message: "Requiere rol COORD" });
   }
   next();
 }
 
 module.exports = {
   authRequired,
-  adminOnly,
+  coordOnly,
 };

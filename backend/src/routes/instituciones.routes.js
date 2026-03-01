@@ -8,17 +8,17 @@ const {
   updateInstitucionStatus,
 } = require("../controllers/instituciones.controller");
 
-const { authRequired, adminOnly } = require("../middleware/auth.middleware");
+const { authRequired, coordOnly } = require("../middleware/auth.middleware");
 
-// GET público (estudiantes pueden ver la lista)
+// GET público
 router.get("/", getAllInstituciones);
 
-// Estudiante registra institución para aprobación
+// Estudiante solicita
 router.post("/solicitar", createInstitucionPublic);
 
-// Solo ADMIN puede crear/editar directamente y cambiar estado
-router.post("/", authRequired, adminOnly, createInstitucion);
-router.put("/:id", authRequired, adminOnly, updateInstitucion);
-router.patch("/:id/status", authRequired, adminOnly, updateInstitucionStatus);
+// Solo COORD
+router.post("/", authRequired, coordOnly, createInstitucion);
+router.put("/:id", authRequired, coordOnly, updateInstitucion);
+router.patch("/:id/status", authRequired, coordOnly, updateInstitucionStatus);
 
 module.exports = router;

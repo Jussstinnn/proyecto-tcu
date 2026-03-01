@@ -1,3 +1,4 @@
+// auth.controller.js
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const pool = require("../config/db");
@@ -16,6 +17,186 @@ function signToken(user) {
   });
 }
 
+// ============================================================
+// ✅ MOCK SSO (OTP) - SIN AZURE
+// ============================================================
+
+// Dominio institucional permitido (configurable)
+const ALLOWED_DOMAIN = process.env.ALLOWED_EMAIL_DOMAIN || "@ufide.ac.cr";
+
+// OTP en memoria (DEV). En producción se guarda en DB/Redis.
+const otpStore = new Map(); // email -> { code, expiresAt, attempts }
+
+function normalizeEmail(email) {
+  return String(email || "")
+    .trim()
+    .toLowerCase();
+}
+
+function validateInstitutionalEmail(email) {
+  return email.endsWith(ALLOWED_DOMAIN);
+}
+
+function generateOtp() {
+  return String(Math.floor(100000 + Math.random() * 900000)); // 6 dígitos
+}
+
+function generateMockOid(email) {
+  // mock estable-ish y único
+  return `mock-oid:${email}:${Date.now()}`;
+}
+
+// POST /api/auth/mock/request
+// body: { email }
+async function requestMockOtp(req, res) {
+  try {
+    const email = normalizeEmail(req.body.email);
+
+    if (!email) {
+      return res.status(400).json({ message: "email es requerido" });
+    }
+    if (!validateInstitutionalEmail(email)) {
+      return res.status(400).json({
+        message: `Solo se permiten correos institucionales ${ALLOWED_DOMAIN}`,
+      });
+    }
+
+    const code = generateOtp();
+    const expiresAt = Date.now() + 5 * 60 * 1000; // 5 min
+    otpStore.set(email, { code, expiresAt, attempts: 0 });
+
+    // ✅ Simulación: en vez de enviar correo, lo mostramos en consola
+    console.log(`[MOCK-OTP] Código para ${email}: ${code} (expira 5 min)`);
+
+    return res.json({
+      message: "Código enviado (modo demo). Revisa la consola del backend.",
+      expiresInSeconds: 300,
+    });
+  } catch (err) {
+    console.error("Error requestMockOtp:", err);
+    return res.status(500).json({ message: "Error en el servidor" });
+  }
+}
+
+// POST /api/auth/mock/verify
+// body: { email, code, nombre? }
+async function verifyMockOtp(req, res) {
+  try {
+    const email = normalizeEmail(req.body.email);
+    const code = String(req.body.code || "").trim();
+    const nombreInput = String(req.body.nombre || "").trim();
+
+    if (!email || !code) {
+      return res.status(400).json({ message: "email y code son requeridos" });
+    }
+    if (!validateInstitutionalEmail(email)) {
+      return res.status(400).json({
+        message: `Solo se permiten correos institucionales ${ALLOWED_DOMAIN}`,
+      });
+    }
+
+    const record = otpStore.get(email);
+    if (!record) {
+      return res
+        .status(401)
+        .json({ message: "Código inválido o no solicitado" });
+    }
+
+    if (Date.now() > record.expiresAt) {
+      otpStore.delete(email);
+      return res.status(401).json({ message: "Código expirado" });
+    }
+
+    record.attempts += 1;
+    if (record.attempts > 5) {
+      otpStore.delete(email);
+      return res
+        .status(429)
+        .json({ message: "Demasiados intentos. Solicita otro código." });
+    }
+
+    if (code !== record.code) {
+      otpStore.set(email, record);
+      return res.status(401).json({ message: "Código incorrecto" });
+    }
+
+    // OTP correcto => eliminamos
+    otpStore.delete(email);
+
+    // 1) Buscar usuario
+    const [rows] = await pool.query(
+      "SELECT * FROM users WHERE email = ? LIMIT 1",
+      [email],
+    );
+    let user = rows[0];
+
+    // 2) Si no existe, crear como STUDENT por defecto
+    if (!user) {
+      const nombre = nombreInput || email.split("@")[0]; // fallback
+      const cedulaMock = "0-0000-0000";
+      const oidMock = generateMockOid(email);
+
+      // ✅ IMPORTANTE: aquí metemos los campos NOT NULL para que no reviente
+      const [result] = await pool.query(
+        `INSERT INTO users (
+          email,
+          nombre,
+          cedula,
+          microsoft_oid,
+          role,
+          is_active
+        )
+        VALUES (?,?,?,?,?,?)`,
+        [email, nombre, cedulaMock, oidMock, "STUDENT", 1],
+      );
+
+      user = {
+        id: result.insertId,
+        nombre,
+        email,
+        role: "STUDENT",
+        cedula: cedulaMock,
+        microsoft_oid: oidMock,
+      };
+    } else {
+      // Si existe y viene nombre y está vacío, lo podemos actualizar
+      if (
+        nombreInput &&
+        (!user.nombre || String(user.nombre).trim().length === 0)
+      ) {
+        await pool.query("UPDATE users SET nombre = ? WHERE id = ?", [
+          nombreInput,
+          user.id,
+        ]);
+        user.nombre = nombreInput;
+      }
+    }
+
+    const token = signToken(user);
+
+    return res.json({
+      user: {
+        id: user.id,
+        nombre: user.nombre,
+        email: user.email,
+        role: user.role,
+      },
+      token,
+    });
+  } catch (err) {
+    console.error("Error verifyMockOtp:", err);
+    return res.status(500).json({
+      message: "Error en el servidor",
+      error: err.message, // 👈 para que veás el motivo en consola/frontend si ocupa
+    });
+  }
+}
+
+// ============================================================
+// TUS FUNCIONES EXISTENTES (register/login/me)
+// (las dejo tal cual, pero la app ya no las usará)
+// ============================================================
+
 // POST /api/auth/register
 async function register(req, res) {
   const { nombre, email, password, cedula, carrera, role } = req.body;
@@ -30,7 +211,7 @@ async function register(req, res) {
     // verificar si ya existe
     const [existing] = await pool.query(
       "SELECT id FROM users WHERE email = ?",
-      [email]
+      [email],
     );
 
     if (existing.length > 0) {
@@ -46,17 +227,17 @@ async function register(req, res) {
         nombre,
         email,
         passwordHash,
-        cedula || null,
+        cedula || "0-0000-0000",
         carrera || null,
-        role === "ADMIN" ? "ADMIN" : "STUDENT",
-      ]
+        "STUDENT", // 👈 siempre estudiante
+      ],
     );
 
     const newUser = {
       id: result.insertId,
       nombre,
       email,
-      role: role === "ADMIN" ? "ADMIN" : "STUDENT",
+      role: "STUDENT", // 👈 fijo
     };
 
     const token = signToken(newUser);
@@ -118,7 +299,7 @@ async function me(req, res) {
   try {
     const [rows] = await pool.query(
       "SELECT id, nombre, email, role, cedula, carrera, created_at FROM users WHERE id = ?",
-      [req.user.id]
+      [req.user.id],
     );
 
     const user = rows[0];
@@ -137,4 +318,8 @@ module.exports = {
   register,
   login,
   me,
+
+  // ✅ nuevos endpoints mock
+  requestMockOtp,
+  verifyMockOtp,
 };
