@@ -13,6 +13,7 @@ import {
 import { toast } from "sonner";
 import { useSolicitudes } from "../contexts/SolicitudContext";
 import SolicitudModal from "../components/SolicitudModal";
+import { LuLogOut } from "react-icons/lu";
 
 export default function AdminDashboard() {
   const {
@@ -257,12 +258,21 @@ export default function AdminDashboard() {
               label="Coordinadores"
               href="/coordinadores"
             />
-            <SidebarItem
-              icon={LuSettings}
-              label="Configuración"
-              href="/settings"
-            />
           </nav>
+          <div className="p-4 border-t border-slate-200">
+            <button
+              onClick={() => {
+                logout();
+                // opcional: redirigir
+                window.location.href = "/login";
+              }}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl
+                         bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
+            >
+              <LuLogOut className="text-lg" />
+              Cerrar Sesión
+            </button>
+          </div>
 
           <div className="p-4 border-t border-slate-200 text-[11px] text-slate-500">
             © {new Date().getFullYear()} Universidad Fidélitas

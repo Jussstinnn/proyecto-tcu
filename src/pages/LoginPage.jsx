@@ -80,13 +80,13 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* “pantalla estilo U” */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-white/90 text-xs font-semibold">
-            TechSeed · TCU
+          <div className="mt-3 flex flex-col items-center">
+            <img
+              src="/FideLogo-04.png"
+              alt="Universidad Fidélitas"
+              className="h-15 w-auto"
+            />
           </div>
-          <h1 className="text-white text-2xl font-extrabold mt-3">
-            Universidad Fidélitas
-          </h1>
-          <p className="text-white/80 text-sm mt-1">Acceso institucional</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl border border-white/30 p-6">
