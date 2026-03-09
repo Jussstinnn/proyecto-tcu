@@ -35,6 +35,7 @@ export default function SolicitudModal({
   onApprove,
   onReject,
   onReturn,
+  canManage = false,
 }) {
   const { fetchSolicitudDetalle } = useSolicitudes();
 
@@ -47,14 +48,28 @@ export default function SolicitudModal({
 
   const [institucionDetalle, setInstitucionDetalle] = useState(null);
 
+  const [editableFlags, setEditableFlags] = useState({
+    institucion: false,
+    proyecto: false,
+    objetivos: false,
+    cronograma: false,
+  });
+
   const canRender = isOpen && !!solicitudData;
   const internalId = solicitudData?._raw?.id ?? solicitudData?.id;
 
   useEffect(() => {
     if (!canRender) return;
+
     setObservation("");
     setActiveTab("estudiante");
     setErrorDetalle("");
+    setEditableFlags({
+      institucion: false,
+      proyecto: false,
+      objetivos: false,
+      cronograma: false,
+    });
   }, [canRender]);
 
   useEffect(() => {
@@ -67,10 +82,26 @@ export default function SolicitudModal({
       try {
         const ui = await fetchSolicitudDetalle(internalId);
         setDetalle(ui || null);
+
+        const rf =
+          ui?._rawDetalle?.revision_flags || ui?.revision_flags || null;
+
+        if (rf) {
+          setEditableFlags({
+            institucion: !!rf.institucion_editable,
+            proyecto: !!rf.proyecto_editable,
+            objetivos: !!rf.objetivos_editable,
+            cronograma: !!rf.cronograma_editable,
+          });
+
+          if (rf.comentario_revisor) {
+            setObservation(rf.comentario_revisor);
+          }
+        }
       } catch (e) {
         console.error("Error cargando detalle:", e);
         setErrorDetalle(
-          "No se pudo cargar el detalle completo. Se mostrará la info disponible.",
+          "No se pudo cargar el detalle completo. Se mostrará la información disponible.",
         );
         setDetalle(null);
       } finally {
@@ -108,11 +139,9 @@ export default function SolicitudModal({
     loadInstitucion();
   }, [canRender, detalle, solicitudData]);
 
-  // ✅ Siempre define "s" de forma segura, aunque no renderice
   const s = detalle || solicitudData || {};
   const legacyForm = s.formData || {};
 
-  // ✅ Objetivos específicos (useMemo ANTES del return condicional)
   const objetivosItems = useMemo(() => {
     const arr =
       (Array.isArray(s.objetivosEspecificosItems) &&
@@ -121,8 +150,9 @@ export default function SolicitudModal({
         legacyForm.objetivosEspecificosItems) ||
       [];
 
-    if (arr.length)
+    if (arr.length) {
       return arr.map((x) => String(x || "").trim()).filter(Boolean);
+    }
 
     const legacyText =
       legacyForm.objetivosEspecificos ||
@@ -134,9 +164,8 @@ export default function SolicitudModal({
       .split("\n")
       .map((x) => x.trim())
       .filter(Boolean);
-  }, [detalle, solicitudData]);
+  }, [s, legacyForm]);
 
-  // ✅ Cronograma (useMemo ANTES del return condicional)
   const cronogramaItems = useMemo(() => {
     const arr =
       (Array.isArray(s.cronogramaItems) && s.cronogramaItems) ||
@@ -151,16 +180,12 @@ export default function SolicitudModal({
         horas: r?.horas ?? "",
       }))
       .filter((r) => r.actividad || r.tarea || String(r.horas).trim() !== "");
-  }, [detalle, solicitudData]);
+  }, [s, legacyForm]);
 
-  // ✅ AHORA sí, return condicional (ya no rompe hooks)
   if (!canRender) return null;
 
-  // ===== Variables normales (sin hooks) =====
   const status = s.status || s.estado || "Enviado";
-  const idPublico = internalId;
 
-  // ===== Datos estudiante =====
   const nombre = legacyForm.nombre || s.estudiante_nombre || "";
   const cedula = legacyForm.cedula || s.estudiante_cedula || "";
   const carrera = legacyForm.carrera || s.carrera || "";
@@ -174,11 +199,9 @@ export default function SolicitudModal({
   const domicilio = legacyForm.domicilio || s.domicilio || "";
   const lugar_trabajo = legacyForm.lugar_trabajo || s.lugar_trabajo || "";
 
-  // ===== Institución =====
   const institucionNombre =
     legacyForm.institucion || s.institucion_nombre || "";
 
-  // ===== Proyecto =====
   const tituloProyecto =
     legacyForm.tituloProyecto || s.tituloProyecto || s.titulo_proyecto || "";
 
@@ -198,18 +221,43 @@ export default function SolicitudModal({
     "";
 
   const handleReturnClick = () => {
+    if (!canManage) return;
+
     if (!observation.trim()) {
       alert("Por favor, escriba una observación para devolver la solicitud.");
       return;
     }
-    onReturn(observation.trim());
+
+    if (
+      !editableFlags.institucion &&
+      !editableFlags.proyecto &&
+      !editableFlags.objetivos &&
+      !editableFlags.cronograma
+    ) {
+      alert(
+        "Debes marcar al menos una sección para habilitar edición al estudiante.",
+      );
+      return;
+    }
+
+    onReturn({
+      observation: observation.trim(),
+      editableFlags: {
+        institucion: editableFlags.institucion,
+        proyecto: editableFlags.proyecto,
+        objetivos: editableFlags.objetivos,
+        cronograma: editableFlags.cronograma,
+      },
+    });
   };
 
   const handleApproveClick = () => {
+    if (!canManage) return;
     onApprove(observation.trim() || "Aprobado sin comentarios.");
   };
 
   const handleRejectClick = () => {
+    if (!canManage) return;
     if (!observation.trim()) {
       alert("Por favor, justifique el rechazo en las observaciones.");
       return;
@@ -232,10 +280,12 @@ export default function SolicitudModal({
           ? "bg-amber-100 text-amber-700"
           : "bg-blue-100 text-blue-700";
 
+  const canEditObservation = canManage && isEditableStatus;
+  const showActions = canManage && isEditableStatus;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 md:p-4">
       <div className="relative w-full max-w-6xl max-h-[90vh] bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
-        {/* HEADER */}
         <div className="flex items-center justify-between px-7 py-5 border-b border-slate-200 bg-slate-50">
           <div>
             <p className="text-xs uppercase tracking-wide text-slate-500">
@@ -260,7 +310,6 @@ export default function SolicitudModal({
           </div>
         </div>
 
-        {/* TABS */}
         <div className="px-7 pt-4">
           <div className="flex flex-wrap gap-2">
             {TABS.map((t) => {
@@ -298,9 +347,7 @@ export default function SolicitudModal({
           )}
         </div>
 
-        {/* BODY */}
         <div className="px-7 py-5 space-y-5 max-h-[62vh] overflow-y-auto">
-          {/* TAB: Estudiante */}
           {activeTab === "estudiante" && (
             <section className="space-y-3">
               <h4 className="text-sm font-semibold text-slate-900">
@@ -321,12 +368,29 @@ export default function SolicitudModal({
             </section>
           )}
 
-          {/* TAB: Institución */}
           {activeTab === "institucion" && (
             <section className="space-y-3">
-              <h4 className="text-sm font-semibold text-slate-900">
-                Institución
-              </h4>
+              <div className="flex items-center justify-between gap-3">
+                <h4 className="text-sm font-semibold text-slate-900">
+                  Institución
+                </h4>
+
+                {canManage && isEditableStatus && (
+                  <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={editableFlags.institucion}
+                      onChange={(e) =>
+                        setEditableFlags((prev) => ({
+                          ...prev,
+                          institucion: e.target.checked,
+                        }))
+                      }
+                    />
+                    Habilitar corrección
+                  </label>
+                )}
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Field label="Nombre" value={institucionNombre || "—"} />
@@ -358,17 +422,35 @@ export default function SolicitudModal({
 
               {!institucionDetalle && (
                 <p className="text-xs text-slate-500">
-                  No se encontró detalle extra de la institución (igual se
-                  muestra el nombre guardado en la solicitud).
+                  No se encontró detalle extra de la institución.
                 </p>
               )}
             </section>
           )}
 
-          {/* TAB: Proyecto */}
           {activeTab === "proyecto" && (
             <section className="space-y-4">
-              <h4 className="text-sm font-semibold text-slate-900">Proyecto</h4>
+              <div className="flex items-center justify-between gap-3">
+                <h4 className="text-sm font-semibold text-slate-900">
+                  Proyecto
+                </h4>
+
+                {canManage && isEditableStatus && (
+                  <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={editableFlags.proyecto}
+                      onChange={(e) =>
+                        setEditableFlags((prev) => ({
+                          ...prev,
+                          proyecto: e.target.checked,
+                        }))
+                      }
+                    />
+                    Habilitar corrección
+                  </label>
+                )}
+              </div>
 
               <div>
                 <p className="font-semibold mb-1 text-xs md:text-sm">
@@ -403,12 +485,29 @@ export default function SolicitudModal({
             </section>
           )}
 
-          {/* TAB: Objetivos */}
           {activeTab === "objetivos" && (
             <section className="space-y-4">
-              <h4 className="text-sm font-semibold text-slate-900">
-                Objetivos
-              </h4>
+              <div className="flex items-center justify-between gap-3">
+                <h4 className="text-sm font-semibold text-slate-900">
+                  Objetivos
+                </h4>
+
+                {canManage && isEditableStatus && (
+                  <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={editableFlags.objetivos}
+                      onChange={(e) =>
+                        setEditableFlags((prev) => ({
+                          ...prev,
+                          objetivos: e.target.checked,
+                        }))
+                      }
+                    />
+                    Habilitar corrección
+                  </label>
+                )}
+              </div>
 
               <div>
                 <p className="font-semibold mb-1 text-xs md:text-sm">
@@ -439,12 +538,29 @@ export default function SolicitudModal({
             </section>
           )}
 
-          {/* TAB: Cronograma */}
           {activeTab === "cronograma" && (
             <section className="space-y-3">
-              <h4 className="text-sm font-semibold text-slate-900">
-                Cronograma
-              </h4>
+              <div className="flex items-center justify-between gap-3">
+                <h4 className="text-sm font-semibold text-slate-900">
+                  Cronograma
+                </h4>
+
+                {canManage && isEditableStatus && (
+                  <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={editableFlags.cronograma}
+                      onChange={(e) =>
+                        setEditableFlags((prev) => ({
+                          ...prev,
+                          cronograma: e.target.checked,
+                        }))
+                      }
+                    />
+                    Habilitar corrección
+                  </label>
+                )}
+              </div>
 
               {cronogramaItems.length ? (
                 <div className="overflow-x-auto border border-slate-200 rounded-2xl">
@@ -480,7 +596,6 @@ export default function SolicitudModal({
             </section>
           )}
 
-          {/* Observaciones (siempre visible) */}
           <section className="pt-1">
             <h4 className="text-sm font-semibold text-slate-900 mb-2">
               Observaciones del revisor
@@ -491,9 +606,17 @@ export default function SolicitudModal({
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-[rgba(2,14,159,1)] focus:border-[rgba(2,14,159,1)]"
               rows={4}
               placeholder="Escribir observaciones para el estudiante..."
-              readOnly={!isEditableStatus}
+              readOnly={!canEditObservation}
             />
-            {!isEditableStatus && (
+
+            {!canManage && (
+              <p className="mt-2 text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                Esta solicitud está en modo lectura. Solo el coordinador
+                asignado puede gestionarla.
+              </p>
+            )}
+
+            {canManage && !isEditableStatus && (
               <p className="mt-1 text-[11px] text-slate-500">
                 Esta solicitud ya fue cerrada. Las observaciones no se pueden
                 editar.
@@ -502,7 +625,6 @@ export default function SolicitudModal({
           </section>
         </div>
 
-        {/* FOOTER */}
         <div className="flex justify-between items-center px-7 py-4 border-t border-slate-200 bg-slate-50">
           <button
             onClick={onClose}
@@ -511,7 +633,7 @@ export default function SolicitudModal({
             Cerrar
           </button>
 
-          {isEditableStatus && (
+          {showActions && (
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={handleReturnClick}
