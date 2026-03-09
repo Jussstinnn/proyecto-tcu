@@ -4,16 +4,19 @@ import {
   LuTicket,
   LuFile,
   LuUsers,
-  LuSettings,
   LuUserCheck,
   LuEye,
   LuHand,
   LuArrowRightLeft,
+  LuLogOut,
+  LuBuilding,
+  LuX,
 } from "react-icons/lu";
 import { toast } from "sonner";
 import { useSolicitudes } from "../contexts/SolicitudContext";
+import { useAuth } from "../contexts/AuthContext.jsx";
+import api from "../api/apiClient";
 import SolicitudModal from "../components/SolicitudModal";
-import { LuLogOut } from "react-icons/lu";
 
 export default function AdminDashboard() {
   const {
@@ -21,20 +24,23 @@ export default function AdminDashboard() {
     loading,
     fetchAllSolicitudes,
     updateSolicitudStatus,
+    returnSolicitudWithFlags,
     takeSolicitud,
     delegateSolicitud,
   } = useSolicitudes();
 
-  const myEmail = useMemo(() => getMyEmail(), []);
+  const { user, logout } = useAuth();
 
-  useEffect(() => {
-    fetchAllSolicitudes().catch((err) =>
-      console.error("Error cargando solicitudes:", err),
-    );
-  }, []);
+  const myEmail = useMemo(() => getMyEmail(), []);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSolicitud, setSelectedSolicitud] = useState(null);
+
+  const [coordinators, setCoordinators] = useState([]);
+  const [loadingCoords, setLoadingCoords] = useState(false);
+
+  const [delegateModalOpen, setDelegateModalOpen] = useState(false);
+  const [delegateTicket, setDelegateTicket] = useState(null);
 
   // ====== FILTROS ======
   const [search, setSearch] = useState("");
@@ -44,12 +50,27 @@ export default function AdminDashboard() {
   const [toDate, setToDate] = useState("");
   const [assignedFilter, setAssignedFilter] = useState("all");
 
-  // ✅ lista de coordinadores (delegar)
-  const coordinators = [
-    "admin@heypoint.com.ar",
-    "coordinacion.tcu@ufidelitas.ac.cr",
-    "coord2@ufidelitas.ac.cr",
-  ];
+  useEffect(() => {
+    fetchAllSolicitudes().catch((err) =>
+      console.error("Error cargando solicitudes:", err),
+    );
+  }, []);
+
+  useEffect(() => {
+    const loadCoordinators = async () => {
+      setLoadingCoords(true);
+      try {
+        const res = await api.get("/user/coords/list");
+        setCoordinators(Array.isArray(res.data) ? res.data : []);
+      } catch (err) {
+        console.error("Error cargando coordinadores:", err);
+      } finally {
+        setLoadingCoords(false);
+      }
+    };
+
+    loadCoordinators();
+  }, []);
 
   const openModal = (solicitud) => {
     setSelectedSolicitud(solicitud);
@@ -61,6 +82,16 @@ export default function AdminDashboard() {
     setIsModalOpen(false);
   };
 
+  const openDelegateModal = (ticket) => {
+    setDelegateTicket(ticket);
+    setDelegateModalOpen(true);
+  };
+
+  const closeDelegateModal = () => {
+    setDelegateTicket(null);
+    setDelegateModalOpen(false);
+  };
+
   const handleApprove = async (observation) => {
     if (!selectedSolicitud || !selectedSolicitud._raw) return;
     await updateSolicitudStatus(
@@ -69,6 +100,7 @@ export default function AdminDashboard() {
       observation,
     );
     closeModal();
+    await fetchAllSolicitudes();
   };
 
   const handleReject = async (observation) => {
@@ -79,35 +111,38 @@ export default function AdminDashboard() {
       observation,
     );
     closeModal();
+    await fetchAllSolicitudes();
   };
 
-  const handleReturn = async (observation) => {
+  const handleReturn = async (payload) => {
     if (!selectedSolicitud || !selectedSolicitud._raw) return;
-    await updateSolicitudStatus(
-      selectedSolicitud._raw.id,
-      "Observado",
-      observation,
-    );
-    closeModal();
+
+    try {
+      await returnSolicitudWithFlags(selectedSolicitud._raw.id, payload);
+      closeModal();
+      await fetchAllSolicitudes();
+      toast.success("Solicitud devuelta con observaciones.");
+    } catch (err) {
+      console.error("Error devolviendo solicitud:", err);
+      toast.error("No se pudo devolver la solicitud.");
+    }
   };
 
-  // ✅ Toast tipo la imagen
   const handleTake = async (idInterno) => {
     const tId = toast.loading("Asignando caso...");
     try {
       await takeSolicitud(idInterno);
-      toast.success("Caso asignado ✅", { id: tId });
+      toast.success("Caso asignado correctamente.", { id: tId });
       await fetchAllSolicitudes();
     } catch (err) {
       console.error("Error tomando solicitud:", err);
-      toast.error("No se pudo asignar el caso ❌", { id: tId });
+      toast.error("No se pudo asignar el caso.", { id: tId });
     }
   };
 
   const handleDelegate = async (ticket, newEmail) => {
     if (!newEmail) return;
 
-    // ✅ regla: solo el dueño delega
     if (
       !ticket.assigned_to ||
       String(ticket.assigned_to).toLowerCase() !== String(myEmail).toLowerCase()
@@ -119,15 +154,15 @@ export default function AdminDashboard() {
     const tId = toast.loading("Delegando caso...");
     try {
       await delegateSolicitud(ticket._raw.id, newEmail);
-      toast.success("Caso delegado ✅", { id: tId });
+      toast.success("Caso delegado correctamente.", { id: tId });
+      closeDelegateModal();
       await fetchAllSolicitudes();
     } catch (err) {
       console.error("Error delegando solicitud:", err);
-      toast.error("No se pudo delegar el caso ❌", { id: tId });
+      toast.error("No se pudo delegar el caso.", { id: tId });
     }
   };
 
-  // ====== HELPERS ======
   const getStatusClass = (estado) => {
     switch (estado) {
       case "Enviado":
@@ -175,7 +210,27 @@ export default function AdminDashboard() {
     });
   };
 
-  // ====== FILTROS ======
+  const getCoordinatorNameByEmail = (email) => {
+    if (!email) return "Sin asignar";
+    const found = coordinators.find(
+      (c) => String(c.email).toLowerCase() === String(email).toLowerCase(),
+    );
+    return found?.nombre || email;
+  };
+
+  const getCoordinatorInitials = (nameOrEmail) => {
+    const text = String(nameOrEmail || "").trim();
+    if (!text) return "AD";
+
+    if (text.includes("@")) {
+      return text.slice(0, 2).toUpperCase();
+    }
+
+    const parts = text.split(" ").filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return `${parts[0][0] || ""}${parts[1][0] || ""}`.toUpperCase();
+  };
+
   const filteredSolicitudes = solicitudes.filter((s) => {
     const searchText = search.toLowerCase();
 
@@ -213,7 +268,6 @@ export default function AdminDashboard() {
     );
   });
 
-  // ====== RESÚMENES ======
   const total = solicitudes.length;
   const pendientes = solicitudes.filter(
     (s) =>
@@ -225,10 +279,15 @@ export default function AdminDashboard() {
   const aprobadas = solicitudes.filter((s) => s.status === "Aprobado").length;
   const rechazadas = solicitudes.filter((s) => s.status === "Rechazado").length;
 
+  const coordinatorDisplayName = user?.nombre || "Coordinador TCU";
+  const coordinatorDisplayEmail =
+    user?.role === "COORD"
+      ? user?.email || "coordinacion.tcu@ufide.ac.cr"
+      : user?.email || "sistemas@ufide.ac.cr";
+
   return (
     <>
       <div className="min-h-screen bg-slate-100 flex">
-        {/* SIDEBAR ADMIN */}
         <aside className="w-64 bg-white border-r border-slate-200 shadow-sm hidden md:flex flex-col">
           <div className="h-16 flex items-center px-6 border-b border-slate-200">
             <div className="w-9 h-9 rounded-xl bg-[rgba(2,14,159,1)] flex items-center justify-center text-white font-bold mr-3">
@@ -245,10 +304,13 @@ export default function AdminDashboard() {
           </div>
 
           <nav className="flex-1 p-4 space-y-1 text-sm">
-            <SidebarItem icon={LuLayoutDashboard} label="Dashboard" active />
-            <SidebarItem icon={LuTicket} label="Solicitudes (Tickets)" />
             <SidebarItem
-              icon={LuUsers}
+              icon={LuLayoutDashboard}
+              label="Dashboard Solicitudes"
+              active
+            />
+            <SidebarItem
+              icon={LuBuilding}
               label="Instituciones"
               href="/instituciones"
             />
@@ -259,15 +321,14 @@ export default function AdminDashboard() {
               href="/coordinadores"
             />
           </nav>
+
           <div className="p-4 border-t border-slate-200">
             <button
               onClick={() => {
                 logout();
-                // opcional: redirigir
                 window.location.href = "/login";
               }}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl
-                         bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
             >
               <LuLogOut className="text-lg" />
               Cerrar Sesión
@@ -279,9 +340,7 @@ export default function AdminDashboard() {
           </div>
         </aside>
 
-        {/* CONTENEDOR PRINCIPAL */}
         <div className="flex-1 flex flex-col">
-          {/* TOPBAR */}
           <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6">
             <div>
               <p className="text-xs text-slate-500 uppercase tracking-wide">
@@ -295,19 +354,19 @@ export default function AdminDashboard() {
             <div className="flex items-center gap-3">
               <div className="text-right hidden sm:block">
                 <p className="text-xs font-semibold text-slate-700">
-                  Eddier Soto Vargas
+                  {coordinatorDisplayName}
                 </p>
-                <p className="text-[11px] text-slate-500">Coordinación TCU</p>
+                <p className="text-[11px] text-slate-500">
+                  {coordinatorDisplayEmail}
+                </p>
               </div>
               <div className="w-9 h-9 rounded-full bg-slate-800 text-white flex items-center justify-center text-xs font-bold">
-                ES
+                {getCoordinatorInitials(coordinatorDisplayName)}
               </div>
             </div>
           </header>
 
-          {/* CONTENIDO */}
           <main className="flex-1 p-4 md:p-6 overflow-y-auto space-y-6">
-            {/* TARJETAS RESUMEN */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <SummaryCard
                 title="Total solicitudes"
@@ -323,7 +382,6 @@ export default function AdminDashboard() {
               <SummaryCard title="Rechazadas" value={rechazadas} color="red" />
             </div>
 
-            {/* TABLA */}
             <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="px-5 pt-4 pb-3 border-b border-slate-200 space-y-3">
                 <div className="flex items-center justify-between gap-3">
@@ -341,13 +399,13 @@ export default function AdminDashboard() {
                     placeholder="Buscar por ID, estudiante o asunto..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-full md:w-64"
+                    className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-full md:w-80"
                   />
 
                   <select
                     value={priorityFilter}
                     onChange={(e) => setPriorityFilter(e.target.value)}
-                    className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm w-[140px]"
+                    className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm w-[200px]"
                   >
                     <option value="all">Todas las prioridades</option>
                     <option value="High">Alta</option>
@@ -358,7 +416,7 @@ export default function AdminDashboard() {
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm w-[160px]"
+                    className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm w-[190px]"
                   >
                     <option value="all">Todos los estados</option>
                     <option value="Enviado">Enviado</option>
@@ -371,7 +429,7 @@ export default function AdminDashboard() {
                   <select
                     value={assignedFilter}
                     onChange={(e) => setAssignedFilter(e.target.value)}
-                    className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm w-[160px]"
+                    className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm w-[170px]"
                   >
                     <option value="all">Todos los casos</option>
                     <option value="unassigned">Sin asignar</option>
@@ -433,6 +491,10 @@ export default function AdminDashboard() {
                           String(ticket.assigned_to).toLowerCase() ===
                             String(myEmail).toLowerCase();
 
+                        const canView = !isAssigned || isMine;
+                        const canTake = !isAssigned;
+                        const canDelegate = isMine;
+
                         return (
                           <tr
                             key={ticket._raw.id}
@@ -444,8 +506,10 @@ export default function AdminDashboard() {
                             <td className="p-3 text-slate-700">
                               {ticket.formData?.nombre || ticket.req || "-"}
                             </td>
-                            <td className="p-3 text-slate-700">
-                              {ticket.subj}
+                            <td className="p-3 text-slate-700 max-w-[260px]">
+                              <span className="line-clamp-2">
+                                {ticket.subj}
+                              </span>
                             </td>
                             <td className="p-3">
                               <span
@@ -467,7 +531,9 @@ export default function AdminDashboard() {
                                 className={`inline-flex px-2 py-1 rounded-full text-[11px] font-medium ${getAssignedClass(ticket.assigned_to)}`}
                               >
                                 {ticket.assigned_to
-                                  ? ticket.assigned_to
+                                  ? getCoordinatorNameByEmail(
+                                      ticket.assigned_to,
+                                    )
                                   : "Sin asignar"}
                               </span>
                             </td>
@@ -478,17 +544,17 @@ export default function AdminDashboard() {
 
                             <td className="p-3 text-slate-700">
                               <div className="flex flex-wrap items-center gap-2">
-                                {/* Ver detalle */}
-                                <button
-                                  onClick={() => openModal(ticket)}
-                                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold"
-                                >
-                                  <LuEye className="text-base" />
-                                  Ver
-                                </button>
+                                {canView && (
+                                  <button
+                                    onClick={() => openModal(ticket)}
+                                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold"
+                                  >
+                                    <LuEye className="text-base" />
+                                    Ver
+                                  </button>
+                                )}
 
-                                {/* Tomar */}
-                                {!isAssigned && (
+                                {canTake && (
                                   <button
                                     onClick={() => handleTake(ticket._raw.id)}
                                     className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#ffd600] hover:bg-yellow-300 text-slate-900 text-xs font-semibold"
@@ -498,41 +564,22 @@ export default function AdminDashboard() {
                                   </button>
                                 )}
 
-                                {/* Delegar */}
-                                {isMine && (
-                                  <div className="inline-flex items-center gap-2">
-                                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-semibold">
-                                      <LuArrowRightLeft className="text-base" />
-                                      Delegar
-                                    </div>
-
-                                    <select
-                                      defaultValue=""
-                                      onChange={(e) =>
-                                        handleDelegate(ticket, e.target.value)
-                                      }
-                                      className="border border-slate-300 rounded-xl px-2 py-1.5 text-xs text-slate-700 bg-white"
-                                    >
-                                      <option value="">A...</option>
-                                      {coordinators
-                                        .filter(
-                                          (c) =>
-                                            String(c).toLowerCase() !==
-                                            String(myEmail).toLowerCase(),
-                                        )
-                                        .map((c) => (
-                                          <option key={c} value={c}>
-                                            {c}
-                                          </option>
-                                        ))}
-                                    </select>
-                                  </div>
+                                {canDelegate && (
+                                  <button
+                                    onClick={() => openDelegateModal(ticket)}
+                                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold"
+                                  >
+                                    <LuArrowRightLeft className="text-base" />
+                                    Delegar
+                                  </button>
                                 )}
 
                                 <span className="w-full text-[11px] text-slate-500 mt-1">
-                                  {isAssigned
-                                    ? "Caso asignado"
-                                    : "Caso disponible"}
+                                  {!isAssigned
+                                    ? "Caso disponible"
+                                    : isMine
+                                      ? "Asignado a ti"
+                                      : "Asignado a otro coordinador"}
                                 </span>
                               </div>
                             </td>
@@ -566,6 +613,21 @@ export default function AdminDashboard() {
         onApprove={handleApprove}
         onReject={handleReject}
         onReturn={handleReturn}
+        canManage={
+          !!selectedSolicitud?.assigned_to &&
+          String(selectedSolicitud.assigned_to).toLowerCase() ===
+            String(myEmail).toLowerCase()
+        }
+      />
+
+      <DelegateModal
+        isOpen={delegateModalOpen}
+        onClose={closeDelegateModal}
+        ticket={delegateTicket}
+        coordinators={coordinators}
+        myEmail={myEmail}
+        onDelegate={handleDelegate}
+        loadingCoords={loadingCoords}
       />
     </>
   );
@@ -590,7 +652,6 @@ function getMyEmail() {
   }
 }
 
-/* ========= SIDEBAR ITEM ========= */
 function SidebarItem({ icon: Icon, label, active = false, href = "#" }) {
   const base =
     "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-sm transition-colors";
@@ -606,7 +667,6 @@ function SidebarItem({ icon: Icon, label, active = false, href = "#" }) {
   );
 }
 
-/* ========= SUMMARY CARD ========= */
 function SummaryCard({ title, value, color }) {
   const colors = {
     blue: "bg-blue-50 text-blue-700",
@@ -627,6 +687,96 @@ function SummaryCard({ title, value, color }) {
         <p className="text-2xl font-bold text-slate-900 leading-tight">
           {value}
         </p>
+      </div>
+    </div>
+  );
+}
+
+function DelegateModal({
+  isOpen,
+  onClose,
+  ticket,
+  coordinators,
+  myEmail,
+  onDelegate,
+  loadingCoords,
+}) {
+  if (!isOpen || !ticket) return null;
+
+  const availableCoords = (coordinators || []).filter(
+    (c) => String(c.email).toLowerCase() !== String(myEmail).toLowerCase(),
+  );
+
+  return (
+    <div className="fixed inset-0 z-[1000] bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center p-4">
+      <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">
+              Delegar caso
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              Selecciona el coordinador al que deseas transferir esta solicitud.
+            </p>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500"
+          >
+            <LuX />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs text-slate-500">Solicitud</p>
+            <p className="text-sm font-semibold text-slate-900 mt-1">
+              #{ticket.id} —{" "}
+              {ticket.formData?.nombre || ticket.req || "Sin nombre"}
+            </p>
+            <p className="text-xs text-slate-600 mt-1">
+              {ticket.subj || "Sin asunto"}
+            </p>
+          </div>
+
+          {loadingCoords ? (
+            <div className="text-sm text-slate-500">
+              Cargando coordinadores...
+            </div>
+          ) : availableCoords.length === 0 ? (
+            <div className="text-sm text-slate-500">
+              No hay coordinadores disponibles para delegar.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {availableCoords.map((coord) => (
+                <button
+                  key={coord.id}
+                  onClick={() => onDelegate(ticket, coord.email)}
+                  className="w-full text-left border border-slate-200 rounded-xl p-4 hover:bg-slate-50 transition"
+                >
+                  <p className="text-sm font-semibold text-slate-900">
+                    {coord.nombre || "Sin nombre"}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">{coord.email}</p>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    {coord.role} {coord.sede ? `• ${coord.sede}` : ""}
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-4 border-t border-slate-200 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm font-semibold hover:bg-slate-200"
+          >
+            Cancelar
+          </button>
+        </div>
       </div>
     </div>
   );
