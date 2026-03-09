@@ -17,7 +17,11 @@ export function AuthProvider({ children }) {
 
     api
       .get("/auth/me")
-      .then((res) => setUser(res.data.user))
+      .then((res) => {
+        setUser(res.data.user);
+        localStorage.setItem("user", JSON.stringify(res.data.user));
+        localStorage.setItem("user_email", res.data.user?.email || "");
+      })
       .catch(() => {
         localStorage.removeItem("token");
         setUser(null);
@@ -33,12 +37,16 @@ export function AuthProvider({ children }) {
   const verifyOtp = async (email, code, nombre) => {
     const res = await api.post("/auth/mock/verify", { email, code, nombre });
     localStorage.setItem("token", res.data.token);
-    setUser(res.data.user); // ✅ ya viene con carrera/cedula si existe
+    localStorage.setItem("user", JSON.stringify(res.data.user));
+    localStorage.setItem("user_email", res.data.user?.email || "");
+    setUser(res.data.user);
     return res.data.user;
   };
 
   const logout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("user_email");
     setUser(null);
   };
 

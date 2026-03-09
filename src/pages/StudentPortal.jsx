@@ -1,5 +1,6 @@
-// src/pages/StudentPortal.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { jsPDF } from "jspdf";
+import { toast } from "sonner";
 import {
   LuLayoutDashboard,
   LuFilePlus2,
@@ -9,13 +10,15 @@ import {
   LuBuilding,
   LuFileText,
   LuCheck,
+  LuLogOut,
+  LuLock,
+  LuTriangleAlert,
 } from "react-icons/lu";
 
 import { useSolicitudes } from "../contexts/SolicitudContext";
 import StudentStatusPage from "./StudentStatusPage";
 import api from "../api/apiClient";
 import { useAuth } from "../contexts/AuthContext.jsx";
-import { LuLogOut } from "react-icons/lu";
 import { useNavigate } from "react-router-dom";
 
 /* ============================================================
@@ -32,9 +35,14 @@ const initialFormData = {
   oficio: "",
   estado_civil: "",
   domicilio: "",
+  lugar_trabajo: "",
 
   institucion_id: "",
   institucion: "",
+  institucion_cedula: "",
+  institucion_supervisor: "",
+  institucion_correo: "",
+  institucion_tipo_servicio: "",
 
   tituloProyecto: "",
   justificacion: "",
@@ -47,64 +55,136 @@ const initialFormData = {
   cronogramaItems: [{ actividad: "", tarea: "", horas: "" }],
 };
 
+function normalizeFormData(source) {
+  if (!source) return initialFormData;
+
+  return {
+    ...initialFormData,
+    ...source,
+    objetivosEspecificosItems: Array.isArray(source.objetivosEspecificosItems)
+      ? source.objetivosEspecificosItems.length
+        ? source.objetivosEspecificosItems
+        : [""]
+      : [""],
+    cronogramaItems: Array.isArray(source.cronogramaItems)
+      ? source.cronogramaItems.length
+        ? source.cronogramaItems
+        : [{ actividad: "", tarea: "", horas: "" }]
+      : [{ actividad: "", tarea: "", horas: "" }],
+  };
+}
+
+function getRevisionEditConfig(solicitud) {
+  const flags =
+    solicitud?.revisionFlags || solicitud?._rawDetalle?.revision_flags;
+
+  return {
+    isObservedMode: solicitud?.estado === "Observado",
+    institucion: Boolean(flags?.institucion_editable),
+    proyecto: Boolean(flags?.proyecto_editable),
+    objetivos: Boolean(flags?.objetivos_editable),
+    cronograma: Boolean(flags?.cronograma_editable),
+    comentarioRevisor: flags?.comentario_revisor || "",
+  };
+}
+
+function SectionLockedNotice({
+  text = "Esta sección está bloqueada por el momento.",
+}) {
+  return (
+    <div className="mb-4 flex items-center gap-2 rounded-xl border border-slate-300 bg-slate-100 px-3 py-2 text-xs text-slate-600">
+      <LuLock className="text-sm" />
+      <span>{text}</span>
+    </div>
+  );
+}
+
 /* ============================================================
    WIZARD DE INSCRIPCIÓN
    ============================================================ */
-function StudentWizard({ onCompleted }) {
+function StudentWizard({ onCompleted, existingSolicitud = null }) {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState(initialFormData);
 
-  const { addSolicitud } = useSolicitudes();
+  const { addSolicitud, resubmitSolicitud } = useSolicitudes();
 
-  // Instituciones desde la BD
   const [instituciones, setInstituciones] = useState([]);
   const [loadingInstituciones, setLoadingInstituciones] = useState(false);
 
-  // Mensaje tipo “toast” dentro del wizard
-  const [flash, setFlash] = useState(null);
+  const revisionConfig = useMemo(
+    () => getRevisionEditConfig(existingSolicitud),
+    [existingSolicitud],
+  );
+
+  const isObservedMode = revisionConfig.isObservedMode;
+
+  const editableSections = {
+    step1: !isObservedMode,
+    step2: !isObservedMode || revisionConfig.institucion,
+    step3: !isObservedMode || revisionConfig.proyecto,
+    step4: !isObservedMode || revisionConfig.objetivos,
+    step5: !isObservedMode || revisionConfig.cronograma,
+  };
 
   const showMessage = (text, type = "success") => {
-    setFlash({ text, type });
-    // opcional: auto-ocultar en unos segundos
-    setTimeout(() => {
-      setFlash((prev) => (prev && prev.text === text ? null : prev));
-    }, 4000);
+    if (type === "error") {
+      toast.error(text);
+      return;
+    }
+    if (type === "warning") {
+      toast.warning(text);
+      return;
+    }
+    toast.success(text);
   };
 
   useEffect(() => {
+    let ignore = false;
+
     const loadUser = async () => {
       try {
         const res = await api.get("/user/me");
         const u = res.data;
 
-        if (u) {
-          setFormData((prev) => ({
-            ...prev,
-            nombre: u.nombre || "",
-            cedula: u.cedula || "",
-            carrera: u.carrera || "",
-            sede: u.sede || "",
-            estudiante_email: u.email || "",
-            estudiante_phone: u.phone || "",
-            oficio: u.oficio || "",
-            estado_civil: u.estado_civil || "",
-            domicilio: u.domicilio || "",
-            lugar_trabajo: u.lugar_trabajo || "",
-          }));
-        }
+        if (!u || ignore) return;
+
+        setFormData((prev) => {
+          const base = isObservedMode
+            ? normalizeFormData(existingSolicitud?.formData)
+            : normalizeFormData(prev);
+
+          return {
+            ...base,
+            nombre: u.nombre || base.nombre || "",
+            cedula: u.cedula || base.cedula || "",
+            carrera: base.carrera || u.carrera || "",
+            sede: base.sede || u.sede || "",
+            estudiante_email: u.email || base.estudiante_email || "",
+            estudiante_phone: base.estudiante_phone || u.phone || "",
+            oficio: base.oficio || u.oficio || "",
+            estado_civil: base.estado_civil || u.estado_civil || "",
+            domicilio: base.domicilio || u.domicilio || "",
+            lugar_trabajo: base.lugar_trabajo || u.lugar_trabajo || "",
+          };
+        });
       } catch (err) {
         console.error("Error cargando usuario:", err);
-        showMessage(
-          "No se pudo cargar la información del estudiante.",
-          "error",
-        );
       }
     };
 
     loadUser();
-  }, []);
 
-  /* === CARGAR INSTITUCIONES APROBADAS === */
+    return () => {
+      ignore = true;
+    };
+  }, [existingSolicitud, isObservedMode]);
+
+  useEffect(() => {
+    if (isObservedMode && existingSolicitud?.formData) {
+      setFormData(normalizeFormData(existingSolicitud.formData));
+    }
+  }, [existingSolicitud, isObservedMode]);
+
   useEffect(() => {
     const loadInstituciones = async () => {
       setLoadingInstituciones(true);
@@ -125,15 +205,133 @@ function StudentWizard({ onCompleted }) {
     loadInstituciones();
   }, []);
 
-  /* === HANDLERS === */
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // ===============================
-  // Objetivos específicos (dinámico)
-  // ===============================
+  const downloadResumenPDF = (data) => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const marginX = 14;
+    const maxWidth = pageWidth - marginX * 2;
+    let y = 18;
+
+    const ensurePage = (extraSpace = 12) => {
+      if (y + extraSpace > pageHeight - 14) {
+        doc.addPage();
+        y = 20;
+      }
+    };
+
+    const line = (text = "", size = 11, bold = false, spacing = 7) => {
+      ensurePage(12);
+      doc.setFont("helvetica", bold ? "bold" : "normal");
+      doc.setFontSize(size);
+
+      const lines = doc.splitTextToSize(String(text), maxWidth);
+      doc.text(lines, marginX, y);
+      y += lines.length * 6 + (spacing - 6);
+    };
+
+    const sectionTitle = (title) => {
+      ensurePage(18);
+      y += 3;
+      doc.setFillColor(245, 247, 250);
+      doc.rect(marginX, y - 5, maxWidth, 8, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text(title, marginX + 2, y);
+      y += 8;
+    };
+
+    const objetivosItems = (
+      Array.isArray(data.objetivosEspecificosItems)
+        ? data.objetivosEspecificosItems
+        : []
+    )
+      .map((x) => String(x || "").trim())
+      .filter(Boolean);
+
+    const cronogramaItems = (
+      Array.isArray(data.cronogramaItems) ? data.cronogramaItems : []
+    )
+      .map((r) => ({
+        actividad: String(r?.actividad || "").trim(),
+        tarea: String(r?.tarea || "").trim(),
+        horas: String(r?.horas ?? "").trim(),
+      }))
+      .filter((r) => r.actividad || r.tarea || r.horas);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text("Anteproyecto TCU", marginX, y);
+    y += 10;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Fecha de generación: ${new Date().toLocaleString()}`, marginX, y);
+    y += 10;
+
+    sectionTitle("1. Datos del estudiante");
+    line(`Nombre: ${data.nombre || "No indicado"}`);
+    line(`Cédula: ${data.cedula || "No indicada"}`);
+    line(`Carrera: ${data.carrera || "No indicada"}`);
+    line(`Sede: ${data.sede || "No indicada"}`);
+    line(`Correo: ${data.estudiante_email || "No indicado"}`);
+    line(`Teléfono: ${data.estudiante_phone || "No indicado"}`);
+    line(`Oficio: ${data.oficio || "No indicado"}`);
+    line(`Estado civil: ${data.estado_civil || "No indicado"}`);
+    line(`Domicilio: ${data.domicilio || "No indicado"}`);
+    line(`Lugar de trabajo: ${data.lugar_trabajo || "No indicado"}`);
+
+    sectionTitle("2. Datos de la institución");
+    line(`Institución: ${data.institucion || "No seleccionada"}`);
+    line(`Cédula jurídica: ${data.institucion_cedula || "No indicada"}`);
+    line(`Supervisor: ${data.institucion_supervisor || "No indicado"}`);
+    line(`Correo de contacto: ${data.institucion_correo || "No indicado"}`);
+    line(
+      `Tipo de servicio: ${data.institucion_tipo_servicio || "No indicado"}`,
+    );
+
+    sectionTitle("3. Datos del proyecto");
+    line(`Título del proyecto: ${data.tituloProyecto || "Sin título"}`);
+    line(
+      `Descripción del problema: ${data.justificacion || "Sin descripción"}`,
+    );
+    line(`Objetivo general: ${data.objetivoGeneral || "Sin objetivo general"}`);
+    line(`Beneficiarios: ${data.beneficiarios || "Sin dato"}`);
+    line(`Estrategia de solución: ${data.estrategiaSolucion || "Sin dato"}`);
+
+    sectionTitle("4. Objetivos específicos");
+    if (objetivosItems.length) {
+      objetivosItems.forEach((obj, index) => {
+        line(`${index + 1}. ${obj}`);
+      });
+    } else {
+      line("No se agregaron objetivos específicos.");
+    }
+
+    sectionTitle("5. Cronograma");
+    if (cronogramaItems.length) {
+      cronogramaItems.forEach((item, index) => {
+        line(`Actividad ${index + 1}: ${item.actividad || "—"}`, 11, true, 6);
+        line(`Tarea: ${item.tarea || "—"}`, 11, false, 6);
+        line(`Horas: ${item.horas || "0"}`, 11, false, 8);
+      });
+    } else {
+      line("No se agregaron filas de cronograma.");
+    }
+
+    const safeName = String(data.nombre || "estudiante")
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^\w-]/g, "");
+
+    doc.save(`Anteproyecto_TCU_${safeName}.pdf`);
+  };
+
   const addObjetivo = () => {
     setFormData((prev) => ({
       ...prev,
@@ -160,51 +358,17 @@ function StudentWizard({ onCompleted }) {
     });
   };
 
-  // ===============================
-  // Cronograma (dinámico)
-  // ===============================
-  const addCronoRow = () => {
-    setFormData((prev) => ({
-      ...prev,
-      cronogramaItems: [
-        ...(prev.cronogramaItems || []),
-        { actividad: "", tarea: "", horas: "" },
-      ],
-    }));
-  };
-
-  const removeCronoRow = (index) => {
-    setFormData((prev) => {
-      const arr = [...(prev.cronogramaItems || [])];
-      arr.splice(index, 1);
-      return {
-        ...prev,
-        cronogramaItems: arr.length
-          ? arr
-          : [{ actividad: "", tarea: "", horas: "" }],
-      };
-    });
-  };
-
-  const updateCronoRow = (index, field, value) => {
-    setFormData((prev) => {
-      const arr = [...(prev.cronogramaItems || [])];
-      arr[index] = { ...arr[index], [field]: value };
-      return { ...prev, cronogramaItems: arr };
-    });
-  };
-
   const handleBack = () => {
     if (currentStep > 1) {
-      setFlash(null);
       setCurrentStep((prev) => prev - 1);
     }
   };
 
   const handleNext = async () => {
-    if (currentStep === 1) {
+    if (currentStep === 1 && !isObservedMode) {
       try {
         await api.patch("/user/me", {
+          cedula: formData.cedula,
           carrera: formData.carrera,
           sede: formData.sede,
           phone: formData.estudiante_phone,
@@ -220,14 +384,11 @@ function StudentWizard({ onCompleted }) {
       }
     }
 
-    // Pasos 1-5: solo avanza (ya con perfil guardado)
     if (currentStep < 6) {
-      setFlash(null);
       setCurrentStep((prev) => prev + 1);
       return;
     }
 
-    // Paso 6: validaciones mínimas
     if (!formData.institucion_id || !formData.institucion) {
       showMessage("Por favor, selecciona una institución.", "error");
       return;
@@ -244,9 +405,16 @@ function StudentWizard({ onCompleted }) {
     }
 
     try {
-      await addSolicitud(formData);
+      downloadResumenPDF(formData);
 
-      showMessage("¡Solicitud de TCU enviada con éxito!", "success");
+      if (isObservedMode && existingSolicitud?.id) {
+        await resubmitSolicitud(existingSolicitud.id, formData);
+        showMessage("Correcciones enviadas correctamente.", "success");
+      } else {
+        await addSolicitud(formData);
+        showMessage("¡Solicitud de TCU enviada con éxito!", "success");
+      }
+
       if (onCompleted) onCompleted();
     } catch (err) {
       console.error("Error al enviar solicitud:", err);
@@ -257,21 +425,6 @@ function StudentWizard({ onCompleted }) {
     }
   };
 
-  const cronograma_items = (formData.cronogramaItems || [])
-    .map((r) => ({
-      actividad: String(r.actividad || "").trim(),
-      tarea: String(r.tarea || "").trim(),
-      horas: String(r.horas || "").trim(),
-    }))
-    .filter((r) => r.actividad && r.tarea && r.horas !== "");
-
-  const objetivos_especificos_items = String(
-    formData.objetivosEspecificos || "",
-  )
-    .split("\n")
-    .map((x) => x.trim())
-    .filter(Boolean);
-
   const steps = [
     { id: 1, name: "Datos Personales", icon: LuUser },
     { id: 2, name: "Institución", icon: LuBuilding },
@@ -281,18 +434,38 @@ function StudentWizard({ onCompleted }) {
     { id: 6, name: "Confirmación", icon: LuFileText },
   ];
 
-  const flashClasses =
-    flash?.type === "error"
-      ? "bg-red-50 text-red-700 border border-red-200"
-      : "bg-emerald-50 text-emerald-700 border border-emerald-200";
-
   return (
     <div className="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden">
-      {/* Header del wizard */}
       <div className="p-6 bg-slate-50 border-b border-slate-200">
         <h1 className="text-xl font-bold text-slate-900 mb-4">
-          Inscripción de Trabajo Comunal Universitario (TCU)
+          {isObservedMode
+            ? "Corrección de anteproyecto observado"
+            : "Inscripción de Trabajo Comunal Universitario (TCU)"}
         </h1>
+
+        {isObservedMode && (
+          <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div className="flex items-start gap-3">
+              <LuTriangleAlert className="mt-0.5 text-lg" />
+              <div>
+                <p className="font-semibold mb-1">
+                  Tu anteproyecto tiene observaciones.
+                </p>
+                <p>
+                  Solo podrás editar las secciones habilitadas por el
+                  coordinador. Lo demás se muestra bloqueado.
+                </p>
+                {revisionConfig.comentarioRevisor && (
+                  <p className="mt-2 text-xs bg-white/70 border border-amber-200 rounded-xl px-3 py-2">
+                    <span className="font-semibold">Comentario:</span>{" "}
+                    {revisionConfig.comentarioRevisor}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         <nav className="flex items-center justify-between gap-2">
           {steps.map((step, index) => {
             const stepIndex = index + 1;
@@ -320,23 +493,18 @@ function StudentWizard({ onCompleted }) {
             );
           })}
         </nav>
-
-        {/* Banner de mensajes */}
-        {flash && (
-          <div className={`mt-4 px-4 py-2 rounded-xl text-sm ${flashClasses}`}>
-            {flash.text}
-          </div>
-        )}
       </div>
 
-      {/* Contenido del paso */}
       <div className="p-6 md:p-8">
         {currentStep === 1 && (
           <Step1_DatosPersonales
             formData={formData}
             handleChange={handleChange}
+            disabled={!editableSections.step1}
+            isObservedMode={isObservedMode}
           />
         )}
+
         {currentStep === 2 && (
           <Step2_Institucion
             formData={formData}
@@ -347,26 +515,39 @@ function StudentWizard({ onCompleted }) {
               setInstituciones((prev) => [...prev, inst])
             }
             onNotify={showMessage}
+            disabled={!editableSections.step2}
           />
         )}
+
         {currentStep === 3 && (
-          <Step3_ProyectoU formData={formData} handleChange={handleChange} />
+          <Step3_ProyectoU
+            formData={formData}
+            handleChange={handleChange}
+            disabled={!editableSections.step3}
+          />
         )}
+
         {currentStep === 4 && (
           <Step4_ObjetivosEspecificos
             formData={formData}
             addObjetivo={addObjetivo}
             removeObjetivo={removeObjetivo}
             updateObjetivo={updateObjetivo}
+            disabled={!editableSections.step4}
           />
         )}
+
         {currentStep === 5 && (
-          <Step5_Cronograma formData={formData} setFormData={setFormData} />
+          <Step5_Cronograma
+            formData={formData}
+            setFormData={setFormData}
+            disabled={!editableSections.step5}
+          />
         )}
+
         {currentStep === 6 && <Step6_Resumen formData={formData} />}
       </div>
 
-      {/* Footer del wizard */}
       <div className="p-6 bg-slate-50 border-t border-slate-200 flex justify-between">
         <button
           onClick={handleBack}
@@ -375,11 +556,16 @@ function StudentWizard({ onCompleted }) {
         >
           Atrás
         </button>
+
         <button
           onClick={handleNext}
           className="px-6 py-2 bg-[rgba(2,14,159,1)] text-white font-semibold rounded-lg shadow-sm hover:bg-indigo-900 text-sm"
         >
-          {currentStep === steps.length ? "Finalizar y Enviar" : "Siguiente"}
+          {currentStep === steps.length
+            ? isObservedMode
+              ? "Finalizar y Reenviar"
+              : "Finalizar y Enviar"
+            : "Siguiente"}
         </button>
       </div>
     </div>
@@ -391,23 +577,40 @@ function StudentWizard({ onCompleted }) {
    ============================================================ */
 
 export default function StudentPortal() {
-  const { mySolicitud, fetchMySolicitud } = useSolicitudes();
-  const [activeTab, setActiveTab] = useState("overview");
+  const {
+    mySolicitud,
+    fetchMySolicitud,
+    clearSolicitudState,
+    fetchSolicitudDetalle,
+  } = useSolicitudes();
 
+  const [activeTab, setActiveTab] = useState("overview");
   const [globalFlash, setGlobalFlash] = useState(null);
+
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
-  };
-
-  // Cargar solicitud propia al entrar al portal
   useEffect(() => {
-    fetchMySolicitud().catch((err) =>
-      console.error("Error cargando mi solicitud:", err),
-    );
+    let ignore = false;
+
+    const loadData = async () => {
+      try {
+        const base = await fetchMySolicitud();
+        if (!ignore && base?.id) {
+          await fetchSolicitudDetalle(base.id);
+        }
+      } catch (err) {
+        if (!ignore) {
+          console.error("Error cargando mi solicitud:", err);
+        }
+      }
+    };
+
+    loadData();
+
+    return () => {
+      ignore = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -415,23 +618,36 @@ export default function StudentPortal() {
     user?.nombre ||
     mySolicitud?.estudiante_nombre ||
     "Estudiante Universidad Fidélitas";
+
   const displayCareer = user?.carrera || mySolicitud?.carrera || "TechSeed";
 
   const handleCompletedWizard = async () => {
-    await fetchMySolicitud().catch((err) =>
-      console.error("Error recargando mi solicitud:", err),
-    );
+    try {
+      const base = await fetchMySolicitud();
+      if (base?.id) {
+        await fetchSolicitudDetalle(base.id);
+      }
+    } catch (err) {
+      console.error("Error recargando mi solicitud:", err);
+    }
+
     setActiveTab("estado");
 
     setGlobalFlash({
-      text: "¡Tu anteproyecto fue enviado exitosamente!",
+      text:
+        mySolicitud?.estado === "Observado"
+          ? "Tus correcciones fueron reenviadas exitosamente."
+          : "Tu anteproyecto fue enviado exitosamente.",
       type: "success",
     });
+
+    setTimeout(() => {
+      setGlobalFlash(null);
+    }, 3500);
   };
 
   return (
     <div className="min-h-screen bg-slate-100 flex">
-      {/* SIDEBAR */}
       <aside className="w-64 bg-white border-r border-slate-200 shadow-sm hidden md:flex flex-col">
         <div className="h-16 flex items-center px-6 border-b border-slate-200">
           <div className="w-9 h-9 rounded-xl bg-[rgba(2,14,159,1)] flex items-center justify-center text-white font-bold mr-3">
@@ -456,7 +672,11 @@ export default function StudentPortal() {
           />
           <SidebarItem
             icon={LuFilePlus2}
-            label="Inscripción de anteproyecto"
+            label={
+              mySolicitud?.estado === "Observado"
+                ? "Corregir anteproyecto"
+                : "Inscripción de anteproyecto"
+            }
             active={activeTab === "inscripcion"}
             onClick={() => setActiveTab("inscripcion")}
           />
@@ -467,15 +687,15 @@ export default function StudentPortal() {
             onClick={() => setActiveTab("estado")}
           />
         </nav>
+
         <div className="p-4 border-t border-slate-200">
           <button
             onClick={() => {
+              clearSolicitudState();
               logout();
-              // opcional: redirigir
               window.location.href = "/login";
             }}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl
-               bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
           >
             <LuLogOut className="text-lg" />
             Cerrar sesión
@@ -487,9 +707,7 @@ export default function StudentPortal() {
         </div>
       </aside>
 
-      {/* CONTENEDOR PRINCIPAL */}
       <div className="flex-1 flex flex-col">
-        {/* TOPBAR */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6">
           <div>
             <p className="text-xs text-slate-500 uppercase tracking-wide">
@@ -515,7 +733,6 @@ export default function StudentPortal() {
           </div>
         </header>
 
-        {/* CONTENIDO CENTRAL */}
         <main className="flex-1 p-4 md:p-6 bg-slate-50 overflow-y-auto">
           {activeTab === "overview" && (
             <OverviewSection
@@ -525,31 +742,69 @@ export default function StudentPortal() {
             />
           )}
 
-          {activeTab === "inscripcion" && (
-            <StudentWizard onCompleted={handleCompletedWizard} />
-          )}
+          {activeTab === "inscripcion" &&
+            (mySolicitud && mySolicitud.estado !== "Observado" ? (
+              <AlreadySubmittedCard
+                solicitud={mySolicitud}
+                goToEstado={() => setActiveTab("estado")}
+              />
+            ) : (
+              <StudentWizard
+                onCompleted={handleCompletedWizard}
+                existingSolicitud={mySolicitud}
+              />
+            ))}
 
           {activeTab === "estado" && (
             <>
-              {/* Banner global arriba del estado */}
               {globalFlash && (
-                <div
-                  className={
-                    "mb-4 px-4 py-2 rounded-xl text-sm border " +
-                    (globalFlash.type === "error"
-                      ? "bg-red-50 text-red-700 border-red-200"
-                      : "bg-emerald-50 text-emerald-700 border-emerald-200")
-                  }
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span>{globalFlash.text}</span>
-                    <button
-                      type="button"
-                      onClick={() => setGlobalFlash(null)}
-                      className="text-[11px] px-2 py-1 rounded hover:bg-white/40"
-                    >
-                      Cerrar
-                    </button>
+                <div className="fixed top-5 right-5 z-[9999] animate-[fadeIn_.25s_ease-out]">
+                  <div
+                    className={
+                      "min-w-[320px] max-w-[420px] rounded-2xl shadow-xl border px-4 py-3 bg-white " +
+                      (globalFlash.type === "error"
+                        ? "border-red-200"
+                        : "border-emerald-200")
+                    }
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={
+                          "mt-0.5 w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold " +
+                          (globalFlash.type === "error"
+                            ? "bg-red-500"
+                            : "bg-emerald-500")
+                        }
+                      >
+                        {globalFlash.type === "error" ? "!" : "✓"}
+                      </div>
+
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-slate-900">
+                          {globalFlash.type === "error"
+                            ? "Ocurrió un error"
+                            : "Proceso completado"}
+                        </p>
+                        <p
+                          className={
+                            "text-sm mt-0.5 " +
+                            (globalFlash.type === "error"
+                              ? "text-red-700"
+                              : "text-emerald-700")
+                          }
+                        >
+                          {globalFlash.text}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setGlobalFlash(null)}
+                        className="text-slate-400 hover:text-slate-600 text-sm"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -611,7 +866,6 @@ function OverviewSection({ mySolicitud, goToInscripcion, goToEstado }) {
 
   return (
     <div className="space-y-6">
-      {/* Tarjetas superiores */}
       <div className="grid md:grid-cols-3 gap-4">
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
           <p className="text-xs text-slate-500 mb-1">Estado del anteproyecto</p>
@@ -647,7 +901,9 @@ function OverviewSection({ mySolicitud, goToInscripcion, goToEstado }) {
               onClick={goToInscripcion}
               className="px-3 py-1 rounded-full text-[11px] font-semibold bg-slate-900 text-white"
             >
-              Inscribir anteproyecto
+              {mySolicitud?.estado === "Observado"
+                ? "Corregir anteproyecto"
+                : "Inscribir anteproyecto"}
             </button>
             <button
               onClick={goToEstado}
@@ -659,7 +915,6 @@ function OverviewSection({ mySolicitud, goToInscripcion, goToEstado }) {
         </div>
       </div>
 
-      {/* Bloques informativos */}
       <div className="grid md:grid-cols-2 gap-4">
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
           <h3 className="text-sm font-semibold text-slate-900 mb-2">
@@ -684,9 +939,66 @@ function OverviewSection({ mySolicitud, goToInscripcion, goToEstado }) {
             onClick={goToInscripcion}
             className="px-4 py-2 bg-[rgba(2,14,159,1)] text-white text-xs font-semibold rounded-lg shadow-sm hover:bg-indigo-900"
           >
-            Comenzar inscripción ahora
+            {mySolicitud?.estado === "Observado"
+              ? "Corregir ahora"
+              : "Comenzar inscripción ahora"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AlreadySubmittedCard({ solicitud, goToEstado }) {
+  return (
+    <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-8 max-w-3xl">
+      <div className="mb-4">
+        <p className="text-xs uppercase tracking-wide text-slate-500">
+          Inscripción de anteproyecto
+        </p>
+        <h2 className="text-2xl font-semibold text-slate-900 mt-1">
+          Ya tienes un anteproyecto registrado
+        </h2>
+      </div>
+
+      <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 mb-6">
+        <p className="text-sm text-blue-900">
+          Tu anteproyecto ya fue enviado y actualmente se encuentra en estado{" "}
+          <span className="font-semibold">
+            {solicitud?.estado || "Enviado"}
+          </span>
+          .
+        </p>
+        <p className="text-sm text-blue-800 mt-2">
+          Desde aquí no puedes crear otro anteproyecto mientras este proceso
+          siga activo. Puedes revisar el seguimiento, historial y observaciones
+          en la sección de estado.
+        </p>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4 mb-6">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs text-slate-500">Número de Solicitud:</p>
+          <p className="text-sm font-semibold text-slate-900 mt-1">
+            {solicitud?.id || `#${solicitud?.codigo_publico || ""}`}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs text-slate-500">Estado actual:</p>
+          <p className="text-sm font-semibold text-slate-900 mt-1">
+            {solicitud?.estado || "Enviado"}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        <button
+          onClick={goToEstado}
+          className="px-5 py-2.5 bg-[rgba(2,14,159,1)] text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-indigo-900"
+        >
+          Ir a estado del anteproyecto
+        </button>
       </div>
     </div>
   );
@@ -696,15 +1008,23 @@ function OverviewSection({ mySolicitud, goToInscripcion, goToEstado }) {
    STEPS DEL WIZARD
    ============================================================ */
 
-function Step1_DatosPersonales({ formData, handleChange }) {
+function Step1_DatosPersonales({
+  formData,
+  handleChange,
+  disabled = false,
+  isObservedMode = false,
+}) {
   return (
-    <div>
+    <div className={disabled ? "opacity-70" : ""}>
       <h3 className="text-lg font-semibold mb-6">
         Paso 1: Datos Personales y Académicos
       </h3>
 
+      {disabled && isObservedMode && (
+        <SectionLockedNotice text="Los datos personales no fueron habilitados para corrección." />
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-        {/* Nombre */}
         <div className="flex flex-col">
           <label className="mb-1 font-medium text-slate-700">
             Nombre Completo del estudiante
@@ -713,12 +1033,11 @@ function Step1_DatosPersonales({ formData, handleChange }) {
             name="nombre"
             value={formData.nombre}
             type="text"
-            className="p-2 border rounded-md bg-slate-100 text-slate-700"
+            className="p-2 border rounded-md bg-slate-100 text-slate-700 cursor-not-allowed"
             readOnly
           />
         </div>
 
-        {/* Cédula */}
         <div className="flex flex-col">
           <label className="mb-1 font-medium text-slate-700">
             Número de Identificación
@@ -726,13 +1045,16 @@ function Step1_DatosPersonales({ formData, handleChange }) {
           <input
             name="cedula"
             value={formData.cedula}
+            onChange={handleChange}
             type="text"
-            className="p-2 border rounded-md bg-slate-100 text-slate-700"
-            readOnly
+            disabled={disabled}
+            placeholder="Ej: 1-2345-6789"
+            className={`p-2 border rounded-md ${
+              disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
+            }`}
           />
         </div>
 
-        {/* Carrera */}
         <div className="flex flex-col md:col-span-2">
           <label className="mb-1 font-medium text-slate-700">Carrera</label>
           <input
@@ -740,12 +1062,14 @@ function Step1_DatosPersonales({ formData, handleChange }) {
             value={formData.carrera}
             onChange={handleChange}
             type="text"
+            disabled={disabled}
             placeholder="Ej: Ingeniería en Desarrollo de Software"
-            className="p-2 border rounded-md"
+            className={`p-2 border rounded-md ${
+              disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
+            }`}
           />
         </div>
 
-        {/* Sede */}
         <div className="flex flex-col">
           <label className="mb-1 font-medium text-slate-700">Sede</label>
           <input
@@ -753,12 +1077,14 @@ function Step1_DatosPersonales({ formData, handleChange }) {
             value={formData.sede}
             onChange={handleChange}
             type="text"
+            disabled={disabled}
             placeholder="Ej: San Pedro"
-            className="p-2 border rounded-md"
+            className={`p-2 border rounded-md ${
+              disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
+            }`}
           />
         </div>
 
-        {/* Correo */}
         <div className="flex flex-col">
           <label className="mb-1 font-medium text-slate-700">
             Correo electrónico
@@ -766,14 +1092,12 @@ function Step1_DatosPersonales({ formData, handleChange }) {
           <input
             name="estudiante_email"
             value={formData.estudiante_email}
-            onChange={handleChange}
             type="email"
-            placeholder="correo@ufidelitas.ac.cr"
-            className="p-2 border rounded-md"
+            className="p-2 border rounded-md bg-slate-100 text-slate-700 cursor-not-allowed"
+            readOnly
           />
         </div>
 
-        {/* Teléfono */}
         <div className="flex flex-col">
           <label className="mb-1 font-medium text-slate-700">
             Número telefónico
@@ -783,12 +1107,14 @@ function Step1_DatosPersonales({ formData, handleChange }) {
             value={formData.estudiante_phone}
             onChange={handleChange}
             type="tel"
+            disabled={disabled}
             placeholder="8888-8888"
-            className="p-2 border rounded-md"
+            className={`p-2 border rounded-md ${
+              disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
+            }`}
           />
         </div>
 
-        {/* Oficio */}
         <div className="flex flex-col">
           <label className="mb-1 font-medium text-slate-700">Oficio</label>
           <input
@@ -796,12 +1122,14 @@ function Step1_DatosPersonales({ formData, handleChange }) {
             value={formData.oficio}
             onChange={handleChange}
             type="text"
+            disabled={disabled}
             placeholder="Ej: Estudiante"
-            className="p-2 border rounded-md"
+            className={`p-2 border rounded-md ${
+              disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
+            }`}
           />
         </div>
 
-        {/* Estado civil */}
         <div className="flex flex-col">
           <label className="mb-1 font-medium text-slate-700">
             Estado Civil
@@ -810,7 +1138,10 @@ function Step1_DatosPersonales({ formData, handleChange }) {
             name="estado_civil"
             value={formData.estado_civil}
             onChange={handleChange}
-            className="p-2 border rounded-md"
+            disabled={disabled}
+            className={`p-2 border rounded-md ${
+              disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
+            }`}
           >
             <option value="">Seleccione</option>
             <option value="Soltero">Soltero</option>
@@ -820,7 +1151,6 @@ function Step1_DatosPersonales({ formData, handleChange }) {
           </select>
         </div>
 
-        {/* Domicilio */}
         <div className="flex flex-col md:col-span-2">
           <label className="mb-1 font-medium text-slate-700">Domicilio</label>
           <input
@@ -828,8 +1158,28 @@ function Step1_DatosPersonales({ formData, handleChange }) {
             value={formData.domicilio}
             onChange={handleChange}
             type="text"
+            disabled={disabled}
             placeholder="Dirección completa"
-            className="p-2 border rounded-md"
+            className={`p-2 border rounded-md ${
+              disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
+            }`}
+          />
+        </div>
+
+        <div className="flex flex-col md:col-span-2">
+          <label className="mb-1 font-medium text-slate-700">
+            Lugar de trabajo
+          </label>
+          <input
+            name="lugar_trabajo"
+            value={formData.lugar_trabajo}
+            onChange={handleChange}
+            type="text"
+            disabled={disabled}
+            placeholder="Ej: Empresa / Institución / Independiente"
+            className={`p-2 border rounded-md ${
+              disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
+            }`}
           />
         </div>
       </div>
@@ -844,12 +1194,12 @@ function Step2_Institucion({
   loading,
   onNewInstitution,
   onNotify,
+  disabled = false,
 }) {
   const [showNewForm, setShowNewForm] = useState(false);
   const [search, setSearch] = useState("");
   const [tipoFilter, setTipoFilter] = useState("Todos");
 
-  // Nuevo registro
   const [newName, setNewName] = useState("");
   const [newCedulaJuridica, setNewCedulaJuridica] = useState("");
   const [newSupervisor, setNewSupervisor] = useState("");
@@ -857,7 +1207,6 @@ function Step2_Institucion({
   const [newType, setNewType] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // 🔹 Opciones únicas del filtro tipo
   const tipos = [
     "Todos",
     ...Array.from(
@@ -867,7 +1216,6 @@ function Step2_Institucion({
     ),
   ];
 
-  // 🔹 Filtrado estilo tabla (nombre/cedula/supervisor/correo/tipo)
   const filtered = (instituciones || []).filter((inst) => {
     const q = search.trim().toLowerCase();
 
@@ -896,12 +1244,12 @@ function Step2_Institucion({
   });
 
   const selectInstitution = (inst) => {
+    if (disabled) return;
+
     setShowNewForm(false);
 
     handleChange({ target: { name: "institucion_id", value: inst.id } });
     handleChange({ target: { name: "institucion", value: inst.nombre } });
-
-    // (Opcional) si querés guardarlo en formData para mostrarlo después:
     handleChange({
       target: { name: "institucion_cedula", value: inst.cedula_juridica || "" },
     });
@@ -912,49 +1260,84 @@ function Step2_Institucion({
       },
     });
     handleChange({
-      target: { name: "institucion_correo", value: inst.contacto_email || "" },
+      target: {
+        name: "institucion_correo",
+        value: inst.supervisor_email || inst.contacto_email || "",
+      },
+    });
+    handleChange({
+      target: {
+        name: "institucion_tipo_servicio",
+        value: inst.tipo_servicio || "",
+      },
     });
   };
 
   const handleSubmitNew = async () => {
+    if (disabled) return;
+
+    const payload = {
+      nombre: newName.trim(),
+      cedula_juridica: newCedulaJuridica.trim(),
+      supervisor_nombre: newSupervisor.trim(),
+      supervisor_email: newEmail.trim(),
+      contacto_email: newEmail.trim(),
+      tipo_servicio: newType.trim(),
+    };
+
     if (
-      !newName ||
-      !newCedulaJuridica ||
-      !newSupervisor ||
-      !newEmail ||
-      !newType
+      !payload.nombre ||
+      !payload.cedula_juridica ||
+      !payload.supervisor_nombre ||
+      !payload.supervisor_email ||
+      !payload.tipo_servicio
     ) {
-      onNotify &&
-        onNotify(
-          "Por favor, completá nombre, cédula jurídica, supervisor, correo y tipo de servicio para la institución.",
-          "error",
-        );
+      onNotify(
+        "Por favor, completá nombre, cédula jurídica, supervisor, correo y tipo de servicio para la institución.",
+        "error",
+      );
       return;
     }
 
     try {
       setSaving(true);
-      const res = await api.post("/instituciones/solicitar", {
-        nombre: newName,
-        cedula_juridica: newCedulaJuridica,
-        supervisor_nombre: newSupervisor,
-        contacto_email: newEmail,
-        tipo_servicio: newType,
-      });
 
+      const res = await api.post("/instituciones/solicitar", payload);
       const nueva = res.data;
 
-      onNotify &&
-        onNotify(
-          "Institución enviada para aprobación. Quedará en estado Pendiente para la coordinación.",
-          "success",
-        );
+      onNotify(
+        "Institución enviada para aprobación. Quedará en estado Pendiente para la coordinación.",
+        "success",
+      );
 
       if (onNewInstitution) onNewInstitution(nueva);
 
-      // seleccionarla automáticamente
       handleChange({ target: { name: "institucion_id", value: nueva.id } });
       handleChange({ target: { name: "institucion", value: nueva.nombre } });
+      handleChange({
+        target: {
+          name: "institucion_cedula",
+          value: nueva.cedula_juridica || "",
+        },
+      });
+      handleChange({
+        target: {
+          name: "institucion_supervisor",
+          value: nueva.supervisor_nombre || "",
+        },
+      });
+      handleChange({
+        target: {
+          name: "institucion_correo",
+          value: nueva.supervisor_email || nueva.contacto_email || "",
+        },
+      });
+      handleChange({
+        target: {
+          name: "institucion_tipo_servicio",
+          value: nueva.tipo_servicio || "",
+        },
+      });
 
       setShowNewForm(false);
       setNewName("");
@@ -964,36 +1347,47 @@ function Step2_Institucion({
       setNewType("");
     } catch (err) {
       console.error("Error registrando nueva institución:", err);
-      onNotify &&
-        onNotify(
-          "No se pudo registrar la institución. Intenta de nuevo o contacta a coordinación.",
-          "error",
-        );
+
+      const backendMessage =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        "No se pudo registrar la institución. Intenta de nuevo o contacta a coordinación.";
+
+      onNotify(backendMessage, "error");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div>
+    <div className={disabled ? "opacity-70" : ""}>
       <h3 className="text-lg font-semibold mb-4">
         Paso 2: Selección de Institución
       </h3>
 
-      {/* Barra superior */}
+      {disabled && (
+        <SectionLockedNotice text="La sección de institución no fue habilitada para corrección." />
+      )}
+
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-200 flex flex-col md:flex-row md:items-center gap-3">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            disabled={disabled}
             placeholder="Buscar por nombre, cédula jurídica, supervisor o correo..."
-            className="p-2 border rounded-md w-full md:max-w-lg"
+            className={`p-2 border rounded-md w-full md:max-w-lg ${
+              disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
+            }`}
           />
 
           <select
             value={tipoFilter}
             onChange={(e) => setTipoFilter(e.target.value)}
-            className="p-2 border rounded-md w-full md:w-64"
+            disabled={disabled}
+            className={`p-2 border rounded-md w-full md:w-64 ${
+              disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
+            }`}
           >
             {tipos.map((x) => (
               <option key={x} value={x}>
@@ -1006,14 +1400,14 @@ function Step2_Institucion({
 
           <button
             type="button"
-            onClick={() => setShowNewForm(true)}
-            className="px-4 py-2 text-xs bg-[rgba(2,14,159,1)] text-white rounded-md hover:bg-indigo-900"
+            onClick={() => !disabled && setShowNewForm(true)}
+            disabled={disabled}
+            className="px-4 py-2 text-xs bg-[rgba(2,14,159,1)] text-white rounded-md hover:bg-indigo-900 disabled:opacity-50"
           >
             No la encontré → Registrar
           </button>
         </div>
 
-        {/* Tabla */}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-600">
@@ -1037,8 +1431,7 @@ function Step2_Institucion({
               ) : filtered.length === 0 ? (
                 <tr>
                   <td className="p-4 text-slate-500" colSpan={6}>
-                    No se encontraron instituciones con esos filtros. Podés
-                    registrar una nueva.
+                    No se encontraron instituciones con esos filtros.
                   </td>
                 </tr>
               ) : (
@@ -1063,7 +1456,8 @@ function Step2_Institucion({
                       <button
                         type="button"
                         onClick={() => selectInstitution(inst)}
-                        className="text-[rgba(2,14,159,1)] font-semibold hover:underline"
+                        disabled={disabled}
+                        className="text-[rgba(2,14,159,1)] font-semibold hover:underline disabled:opacity-50"
                       >
                         Seleccionar
                       </button>
@@ -1075,7 +1469,6 @@ function Step2_Institucion({
           </table>
         </div>
 
-        {/* Selección actual */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 text-sm">
           <span className="font-semibold text-slate-800">Seleccionada: </span>
           <span className="text-slate-600">
@@ -1084,8 +1477,7 @@ function Step2_Institucion({
         </div>
       </div>
 
-      {/* Formulario para registrar nueva */}
-      {showNewForm && (
+      {showNewForm && !disabled && (
         <div className="mt-4 p-4 border border-slate-200 rounded-xl bg-slate-50 space-y-3 text-sm">
           <p className="font-semibold text-slate-800">
             Registrar nueva institución para aprobación
@@ -1150,45 +1542,65 @@ function Step2_Institucion({
   );
 }
 
-function Step3_ProyectoU({ formData, handleChange }) {
+function Step3_ProyectoU({ formData, handleChange, disabled = false }) {
   return (
-    <div>
+    <div className={disabled ? "opacity-70" : ""}>
       <h3 className="text-lg font-semibold mb-4">Paso 3: Datos del proyecto</h3>
+
+      {disabled && (
+        <SectionLockedNotice text="La sección de proyecto no fue habilitada para corrección." />
+      )}
+
       <div className="space-y-4 text-sm">
         <textarea
           name="tituloProyecto"
           value={formData.tituloProyecto}
           onChange={handleChange}
+          disabled={disabled}
           placeholder="Título del proyecto"
-          className="w-full p-2 border rounded-md h-16"
+          className={`w-full p-2 border rounded-md h-16 ${
+            disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
+          }`}
         />
         <textarea
           name="justificacion"
           value={formData.justificacion}
           onChange={handleChange}
+          disabled={disabled}
           placeholder="Descripción del problema"
-          className="w-full p-2 border rounded-md h-20"
+          className={`w-full p-2 border rounded-md h-20 ${
+            disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
+          }`}
         />
         <textarea
           name="objetivoGeneral"
           value={formData.objetivoGeneral}
           onChange={handleChange}
+          disabled={disabled}
           placeholder="Objetivo general"
-          className="w-full p-2 border rounded-md h-16"
+          className={`w-full p-2 border rounded-md h-16 ${
+            disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
+          }`}
         />
         <textarea
           name="beneficiarios"
           value={formData.beneficiarios}
           onChange={handleChange}
+          disabled={disabled}
           placeholder="¿A quién se beneficiará el proyecto?"
-          className="w-full p-2 border rounded-md h-16"
+          className={`w-full p-2 border rounded-md h-16 ${
+            disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
+          }`}
         />
         <textarea
           name="estrategiaSolucion"
           value={formData.estrategiaSolucion}
           onChange={handleChange}
+          disabled={disabled}
           placeholder="Estrategia y pertinencia de solución (actividades principales)"
-          className="w-full p-2 border rounded-md h-20"
+          className={`w-full p-2 border rounded-md h-20 ${
+            disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
+          }`}
         />
       </div>
     </div>
@@ -1200,14 +1612,19 @@ function Step4_ObjetivosEspecificos({
   addObjetivo,
   removeObjetivo,
   updateObjetivo,
+  disabled = false,
 }) {
   const items = formData.objetivosEspecificosItems || [""];
 
   return (
-    <div>
+    <div className={disabled ? "opacity-70" : ""}>
       <h3 className="text-lg font-semibold mb-4">
         Paso 4: Objetivos específicos
       </h3>
+
+      {disabled && (
+        <SectionLockedNotice text="La sección de objetivos no fue habilitada para corrección." />
+      )}
 
       <p className="text-sm text-slate-600 mb-3">
         Agregá tus objetivos específicos uno por uno. Podés agregar los que
@@ -1221,10 +1638,15 @@ function Step4_ObjetivosEspecificos({
               <input
                 value={obj}
                 onChange={(e) => updateObjetivo(idx, e.target.value)}
+                disabled={disabled}
                 placeholder={`Objetivo específico #${idx + 1}`}
-                className="w-full p-2 border rounded-md text-sm"
+                className={`w-full p-2 border rounded-md text-sm ${
+                  disabled
+                    ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                    : ""
+                }`}
               />
-              {!obj.trim() && (
+              {!obj.trim() && !disabled && (
                 <p className="text-[11px] text-slate-400 mt-1">
                   Escribí un objetivo para poder guardarlo.
                 </p>
@@ -1234,7 +1656,7 @@ function Step4_ObjetivosEspecificos({
             <button
               type="button"
               onClick={() => removeObjetivo(idx)}
-              disabled={items.length === 1}
+              disabled={items.length === 1 || disabled}
               className="px-3 py-2 text-xs bg-slate-200 rounded-md disabled:opacity-50 hover:bg-slate-300"
               title="Quitar"
             >
@@ -1248,7 +1670,8 @@ function Step4_ObjetivosEspecificos({
         <button
           type="button"
           onClick={addObjetivo}
-          className="px-4 py-2 text-xs bg-[rgba(2,14,159,1)] text-white rounded-md hover:bg-indigo-900"
+          disabled={disabled}
+          className="px-4 py-2 text-xs bg-[rgba(2,14,159,1)] text-white rounded-md hover:bg-indigo-900 disabled:opacity-50"
         >
           + Agregar objetivo
         </button>
@@ -1257,12 +1680,13 @@ function Step4_ObjetivosEspecificos({
   );
 }
 
-function Step5_Cronograma({ formData, setFormData }) {
+function Step5_Cronograma({ formData, setFormData, disabled = false }) {
   const items = formData.cronogramaItems || [
     { actividad: "", tarea: "", horas: "" },
   ];
 
   const addRow = () => {
+    if (disabled) return;
     setFormData((prev) => ({
       ...prev,
       cronogramaItems: [...items, { actividad: "", tarea: "", horas: "" }],
@@ -1270,6 +1694,7 @@ function Step5_Cronograma({ formData, setFormData }) {
   };
 
   const removeRow = (idx) => {
+    if (disabled) return;
     setFormData((prev) => {
       const next = [...items];
       next.splice(idx, 1);
@@ -1283,6 +1708,7 @@ function Step5_Cronograma({ formData, setFormData }) {
   };
 
   const updateRow = (idx, field, value) => {
+    if (disabled) return;
     setFormData((prev) => {
       const next = [...items];
       next[idx] = { ...next[idx], [field]: value };
@@ -1291,8 +1717,12 @@ function Step5_Cronograma({ formData, setFormData }) {
   };
 
   return (
-    <div>
+    <div className={disabled ? "opacity-70" : ""}>
       <h3 className="text-lg font-semibold mb-4">Paso 5: Cronograma</h3>
+
+      {disabled && (
+        <SectionLockedNotice text="La sección de cronograma no fue habilitada para corrección." />
+      )}
 
       <p className="text-sm text-slate-600 mb-3">
         Agregá actividades, tareas y horas estimadas.
@@ -1313,8 +1743,13 @@ function Step5_Cronograma({ formData, setFormData }) {
               <tr key={idx} className="bg-white">
                 <td className="p-2 border-b">
                   <input
-                    className="w-full p-2 border rounded-md"
+                    className={`w-full p-2 border rounded-md ${
+                      disabled
+                        ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                        : ""
+                    }`}
                     value={row.actividad}
+                    disabled={disabled}
                     onChange={(e) =>
                       updateRow(idx, "actividad", e.target.value)
                     }
@@ -1323,18 +1758,28 @@ function Step5_Cronograma({ formData, setFormData }) {
                 </td>
                 <td className="p-2 border-b">
                   <input
-                    className="w-full p-2 border rounded-md"
+                    className={`w-full p-2 border rounded-md ${
+                      disabled
+                        ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                        : ""
+                    }`}
                     value={row.tarea}
+                    disabled={disabled}
                     onChange={(e) => updateRow(idx, "tarea", e.target.value)}
                     placeholder="Ej: Recolección de información"
                   />
                 </td>
                 <td className="p-2 border-b">
                   <input
-                    className="w-full p-2 border rounded-md"
+                    className={`w-full p-2 border rounded-md ${
+                      disabled
+                        ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                        : ""
+                    }`}
                     value={row.horas}
+                    disabled={disabled}
                     onChange={(e) => updateRow(idx, "horas", e.target.value)}
-                    placeholder="10"
+                    placeholder="8 Max"
                     inputMode="numeric"
                   />
                 </td>
@@ -1342,7 +1787,7 @@ function Step5_Cronograma({ formData, setFormData }) {
                   <button
                     type="button"
                     onClick={() => removeRow(idx)}
-                    disabled={items.length === 1}
+                    disabled={items.length === 1 || disabled}
                     className="px-3 py-2 text-xs bg-slate-200 rounded-md disabled:opacity-50 hover:bg-slate-300"
                   >
                     Quitar
@@ -1358,7 +1803,8 @@ function Step5_Cronograma({ formData, setFormData }) {
         <button
           type="button"
           onClick={addRow}
-          className="px-4 py-2 text-xs bg-[rgba(2,14,159,1)] text-white rounded-md hover:bg-indigo-900"
+          disabled={disabled}
+          className="px-4 py-2 text-xs bg-[rgba(2,14,159,1)] text-white rounded-md hover:bg-indigo-900 disabled:opacity-50"
         >
           + Agregar fila
         </button>
@@ -1368,18 +1814,14 @@ function Step5_Cronograma({ formData, setFormData }) {
 }
 
 function Step6_Resumen({ formData }) {
-  // ✅ Objetivos: primero intenta array dinámico, si no existe cae al legacy string (por líneas)
   const objetivosItems = (
     Array.isArray(formData.objetivosEspecificosItems)
       ? formData.objetivosEspecificosItems
-      : String(formData.objetivosEspecificos || "")
-          .split("\n")
-          .map((x) => x.trim())
+      : []
   )
     .map((x) => String(x || "").trim())
     .filter(Boolean);
 
-  // ✅ Cronograma: normaliza y filtra filas vacías
   const cronogramaItems = (
     Array.isArray(formData.cronogramaItems) ? formData.cronogramaItems : []
   )
@@ -1390,45 +1832,117 @@ function Step6_Resumen({ formData }) {
     }))
     .filter((r) => r.actividad || r.tarea || r.horas);
 
+  const Field = ({ label, value }) => (
+    <div className="grid md:grid-cols-[220px_1fr] gap-2 py-2 border-b border-slate-100 last:border-b-0">
+      <span className="font-medium text-slate-600">{label}</span>
+      <span className="text-slate-800 break-words">
+        {value || "No indicado"}
+      </span>
+    </div>
+  );
+
   return (
     <div>
       <h3 className="text-lg font-semibold mb-4">Paso 6: Confirmación</h3>
 
-      <p className="text-sm text-slate-600 mb-3">
-        Al finalizar se enviará tu anteproyecto para revisión. Podrás seguir su
-        estado desde el panel “Estado del anteproyecto”.
+      <p className="text-sm text-slate-600 mb-5">
+        Revisá cuidadosamente toda la información. Al dar clic en
+        <span className="font-semibold"> “Finalizar y Enviar” </span>
+        se descargará un PDF con este resumen y luego se enviará tu anteproyecto
+        para revisión.
       </p>
 
-      <div className="space-y-4 text-sm text-slate-700">
-        <div className="bg-white border rounded-xl p-4">
-          <p className="font-semibold mb-2">Datos principales</p>
-          <ul className="space-y-1 list-disc list-inside">
-            <li>Institución: {formData.institucion || "No seleccionada"}</li>
-            <li>Título: {formData.tituloProyecto || "Sin título"}</li>
-            <li>
-              Descripción del problema:{" "}
-              {formData.justificacion || "Sin descripción"}
-            </li>
-            <li>
-              Objetivo general: {formData.objetivoGeneral || "Sin objetivo"}
-            </li>
-            <li>Beneficiarios: {formData.beneficiarios || "Sin dato"}</li>
-            <li>
-              Estrategia de solución:{" "}
-              {formData.estrategiaSolucion || "Sin dato"}
-            </li>
-          </ul>
+      <div className="space-y-5 text-sm">
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
+          <h4 className="text-base font-semibold text-slate-900 mb-3">
+            Datos del estudiante
+          </h4>
+          <div>
+            <Field label="Nombre completo" value={formData.nombre} />
+            <Field label="Cédula" value={formData.cedula} />
+            <Field label="Carrera" value={formData.carrera} />
+            <Field label="Sede" value={formData.sede} />
+            <Field
+              label="Correo electrónico"
+              value={formData.estudiante_email}
+            />
+            <Field
+              label="Número telefónico"
+              value={formData.estudiante_phone}
+            />
+            <Field label="Oficio" value={formData.oficio} />
+            <Field label="Estado civil" value={formData.estado_civil} />
+            <Field label="Domicilio" value={formData.domicilio} />
+            <Field label="Lugar de trabajo" value={formData.lugar_trabajo} />
+          </div>
         </div>
 
-        <div className="bg-white border rounded-xl p-4">
-          <p className="font-semibold mb-2">Objetivos específicos</p>
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
+          <h4 className="text-base font-semibold text-slate-900 mb-3">
+            Datos de la institución
+          </h4>
+          <div>
+            <Field
+              label="Institución seleccionada"
+              value={formData.institucion}
+            />
+            <Field
+              label="Cédula jurídica"
+              value={formData.institucion_cedula}
+            />
+            <Field label="Supervisor" value={formData.institucion_supervisor} />
+            <Field
+              label="Correo de contacto"
+              value={formData.institucion_correo}
+            />
+            <Field
+              label="Tipo de servicio"
+              value={formData.institucion_tipo_servicio}
+            />
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
+          <h4 className="text-base font-semibold text-slate-900 mb-3">
+            Datos del proyecto
+          </h4>
+          <div>
+            <Field
+              label="Título del proyecto"
+              value={formData.tituloProyecto}
+            />
+            <Field
+              label="Descripción del problema"
+              value={formData.justificacion}
+            />
+            <Field label="Objetivo general" value={formData.objetivoGeneral} />
+            <Field label="Beneficiarios" value={formData.beneficiarios} />
+            <Field
+              label="Estrategia de solución"
+              value={formData.estrategiaSolucion}
+            />
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
+          <h4 className="text-base font-semibold text-slate-900 mb-3">
+            Objetivos específicos
+          </h4>
 
           {objetivosItems.length ? (
-            <ul className="space-y-1 list-disc list-inside">
-              {objetivosItems.map((x, i) => (
-                <li key={`${i}-${x.slice(0, 20)}`}>{x}</li>
+            <div className="space-y-2">
+              {objetivosItems.map((obj, i) => (
+                <div
+                  key={`${i}-${obj.slice(0, 20)}`}
+                  className="p-3 rounded-lg bg-slate-50 border border-slate-200"
+                >
+                  <span className="font-semibold text-slate-700 mr-2">
+                    {i + 1}.
+                  </span>
+                  <span className="text-slate-800">{obj}</span>
+                </div>
               ))}
-            </ul>
+            </div>
           ) : (
             <p className="text-slate-500">
               No agregaste objetivos específicos.
@@ -1436,14 +1950,17 @@ function Step6_Resumen({ formData }) {
           )}
         </div>
 
-        <div className="bg-white border rounded-xl p-4">
-          <p className="font-semibold mb-2">Cronograma</p>
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
+          <h4 className="text-base font-semibold text-slate-900 mb-3">
+            Cronograma
+          </h4>
 
           {cronogramaItems.length ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
                 <thead className="bg-slate-50 text-slate-700">
                   <tr>
+                    <th className="text-left px-3 py-2 border-b">#</th>
                     <th className="text-left px-3 py-2 border-b">Actividad</th>
                     <th className="text-left px-3 py-2 border-b">Tarea</th>
                     <th className="text-left px-3 py-2 border-b">Horas</th>
@@ -1452,6 +1969,7 @@ function Step6_Resumen({ formData }) {
                 <tbody>
                   {cronogramaItems.map((r, i) => (
                     <tr key={i} className="border-b last:border-b-0">
+                      <td className="px-3 py-2">{i + 1}</td>
                       <td className="px-3 py-2">{r.actividad || "—"}</td>
                       <td className="px-3 py-2">{r.tarea || "—"}</td>
                       <td className="px-3 py-2">{r.horas || "0"}</td>

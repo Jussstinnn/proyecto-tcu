@@ -1,5 +1,16 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { LuX } from "react-icons/lu";
+
+const initialForm = {
+  nombre: "",
+  cedula_juridica: "",
+  supervisor_nombre: "",
+  supervisor_cargo: "",
+  supervisor_email: "",
+  contacto_email: "",
+  tipo_servicio: "",
+  estado: "Aprobada",
+};
 
 export default function InstitutionModal({
   isOpen,
@@ -7,57 +18,44 @@ export default function InstitutionModal({
   onSave,
   institutionData,
 }) {
-  const [name, setName] = useState("");
-  const [contact, setContact] = useState("");
-  const [type, setType] = useState("");
+  const [form, setForm] = useState(initialForm);
 
   const isEditMode = !!institutionData;
 
   useEffect(() => {
     if (!isOpen) return;
 
-    const data = institutionData || {
-      name: "",
-      contact: "",
-      type: "",
-    };
-
-    const nombre = data.name || data.nombre || "";
-    const contacto = data.contact || data.contacto_email || "";
-    const tipo = data.type || data.tipo_servicio || "";
-
-    setName(nombre);
-    setContact(contacto);
-    setType(tipo);
+    if (institutionData) {
+      setForm({
+        nombre: institutionData.nombre || "",
+        cedula_juridica: institutionData.cedula_juridica || "",
+        supervisor_nombre: institutionData.supervisor_nombre || "",
+        supervisor_cargo: institutionData.supervisor_cargo || "",
+        supervisor_email: institutionData.supervisor_email || "",
+        contacto_email: institutionData.contacto_email || "",
+        tipo_servicio: institutionData.tipo_servicio || "",
+        estado: institutionData.estado || "Pendiente",
+      });
+    } else {
+      setForm(initialForm);
+    }
   }, [isOpen, institutionData]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-
-    if (!name || !contact) {
-      alert("Por favor, complete el nombre y el contacto.");
-      return;
-    }
-
-    onSave(
-      {
-        name,
-        contact,
-        type,
-        nombre: name,
-        contacto_email: contact,
-        tipo_servicio: type,
-      },
-      institutionData ? institutionData.id : null
-    );
+    onSave(form, institutionData ? institutionData.id : null);
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
-        {/* HEADER */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
           <div>
             <p className="text-xs uppercase tracking-wide text-slate-500">
@@ -69,6 +67,7 @@ export default function InstitutionModal({
                 : "Registrar nueva institución"}
             </h3>
           </div>
+
           <button
             onClick={onClose}
             className="p-1.5 rounded-full hover:bg-slate-200 text-slate-500"
@@ -77,24 +76,20 @@ export default function InstitutionModal({
           </button>
         </div>
 
-        {/* FORMULARIO */}
         <form
           id="institution-form"
           onSubmit={handleSubmit}
-          className="px-6 py-5 space-y-5"
+          className="px-6 py-5 space-y-5 max-h-[70vh] overflow-y-auto"
         >
           <div>
-            <label
-              htmlFor="name"
-              className="block text-sm font-medium text-slate-700 mb-1"
-            >
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               Nombre de la institución
             </label>
             <input
-              id="name"
+              name="nombre"
               type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={form.nombre}
+              onChange={handleChange}
               className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[rgba(2,14,159,1)] focus:border-[rgba(2,14,159,1)]"
               placeholder="Ej: Hogar de Ancianos Luz y Vida"
             />
@@ -102,48 +97,123 @@ export default function InstitutionModal({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label
-                htmlFor="contact"
-                className="block text-sm font-medium text-slate-700 mb-1"
-              >
-                Correo de contacto
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Cédula jurídica
               </label>
               <input
-                id="contact"
-                type="email"
-                value={contact}
-                onChange={(e) => setContact(e.target.value)}
+                name="cedula_juridica"
+                type="text"
+                value={form.cedula_juridica}
+                onChange={handleChange}
                 className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[rgba(2,14,159,1)] focus:border-[rgba(2,14,159,1)]"
-                placeholder="Ej: ana@luzvida.org"
+                placeholder="Ej: 3-101-999999"
               />
             </div>
 
             <div>
-              <label
-                htmlFor="type"
-                className="block text-sm font-medium text-slate-700 mb-1"
-              >
+              <label className="block text-sm font-medium text-slate-700 mb-1">
                 Tipo de servicio
               </label>
               <input
-                id="type"
+                name="tipo_servicio"
                 type="text"
-                value={type}
-                onChange={(e) => setType(e.target.value)}
+                value={form.tipo_servicio}
+                onChange={handleChange}
                 className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[rgba(2,14,159,1)] focus:border-[rgba(2,14,159,1)]"
-                placeholder="Ej: Cuidado de adulto mayor, Educación, ONG…"
+                placeholder="Ej: Adulto mayor, Educación, ONG..."
               />
             </div>
           </div>
 
+          <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3">
+            <p className="text-sm font-semibold text-slate-800 mb-3">
+              Información del supervisor
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Nombre del supervisor
+                </label>
+                <input
+                  name="supervisor_nombre"
+                  type="text"
+                  value={form.supervisor_nombre}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm"
+                  placeholder="Ej: Ana Pérez"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Cargo del supervisor
+                </label>
+                <input
+                  name="supervisor_cargo"
+                  type="text"
+                  value={form.supervisor_cargo}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm"
+                  placeholder="Ej: Coordinadora TCU"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Correo del supervisor
+                </label>
+                <input
+                  name="supervisor_email"
+                  type="email"
+                  value={form.supervisor_email}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm"
+                  placeholder="Ej: ana@institucion.org"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Correo de contacto general
+                </label>
+                <input
+                  name="contacto_email"
+                  type="email"
+                  value={form.contacto_email}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm"
+                  placeholder="Ej: contacto@institucion.org"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Estado
+            </label>
+            <select
+              name="estado"
+              value={form.estado}
+              onChange={handleChange}
+              className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm"
+            >
+              <option value="Aprobada">Aprobada / Habilitada</option>
+              <option value="Deshabilitada">Deshabilitada</option>
+              <option value="Pendiente">Pendiente</option>
+              <option value="Rechazada">Rechazada</option>
+            </select>
+          </div>
+
           <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-xs text-slate-600">
-            Recordá que solo se aprueban instituciones <b>sin fines de lucro</b>{" "}
-            y con alineación al reglamento del TCU (ONGs, municipalidades,
-            centros educativos, fundaciones, etc.).
+            En el portal del estudiante deben mostrarse únicamente las
+            instituciones habilitadas. Puedes controlar eso dejando la
+            institución en estado
+            <b> Aprobada</b> y ocultarla poniendo <b>Deshabilitada</b>.
           </div>
         </form>
 
-        {/* FOOTER */}
         <div className="flex justify-between items-center px-6 py-4 border-t border-slate-200 bg-slate-50">
           <button
             onClick={onClose}
@@ -151,12 +221,13 @@ export default function InstitutionModal({
           >
             Cancelar
           </button>
+
           <button
             type="submit"
             form="institution-form"
             className="px-5 py-2 text-xs md:text-sm font-semibold text-white rounded-xl shadow-sm bg-[rgba(2,14,159,1)] hover:bg-indigo-900"
           >
-            {isEditMode ? "Actualizar institución" : "Guardar y aprobar"}
+            {isEditMode ? "Actualizar institución" : "Guardar institución"}
           </button>
         </div>
       </div>

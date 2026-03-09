@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, useCallback } from "react";
 import api from "../api/apiClient";
 
 const SolicitudContext = createContext(null);
@@ -23,7 +23,6 @@ function mapSolicitudFromApi(apiS) {
   const tituloProyecto = apiS.titulo_proyecto || "";
   const beneficiario = apiS.beneficiario || "";
   const estrategiaSolucion = apiS.estrategia_solucion || "";
-
   const justificacion = apiS.descripcion_problema || apiS.justificacion || "";
 
   const subjectBase =
@@ -70,9 +69,7 @@ function mapSolicitudFromApi(apiS) {
     beneficiario,
     estrategiaSolucion,
     objetivoGeneral,
-
     objetivosEspecificos: apiS.objetivos_especificos || "",
-
     justificacion,
 
     objetivosEspecificosItems: Array.isArray(apiS.objetivosEspecificosItems)
@@ -84,6 +81,8 @@ function mapSolicitudFromApi(apiS) {
 
     req: apiS.estudiante_nombre || "",
     subj: `${subjectBase.slice(0, 30)}...`,
+
+    revisionFlags: apiS.revision_flags || null,
 
     formData: {
       nombre: apiS.estudiante_nombre || "",
@@ -100,6 +99,10 @@ function mapSolicitudFromApi(apiS) {
 
       institucion_id: apiS.institucion_id || null,
       institucion: apiS.institucion_nombre || "",
+      institucion_cedula: apiS.institucion_cedula || "",
+      institucion_supervisor: apiS.institucion_supervisor || "",
+      institucion_correo: apiS.institucion_correo || "",
+      institucion_tipo_servicio: apiS.institucion_tipo_servicio || "",
 
       tituloProyecto,
       justificacion,
@@ -151,6 +154,7 @@ function mapSolicitudDetalleFromApi(apiDetalle) {
     ...ui,
     objetivosEspecificosItems: objetivosItems,
     cronogramaItems,
+    revisionFlags: apiDetalle.revision_flags || null,
     history: history.map((h) => ({
       date: h.created_at || h.fecha || h.date || new Date().toISOString(),
       action: h.accion || h.action || "",
@@ -175,27 +179,7 @@ export function SolicitudProvider({ children }) {
   const [mySolicitud, setMySolicitud] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // ✅ NUEVO: email del coordinador (ajusta la key si tu app usa otra)
-  const getMyEmail = () => {
-    try {
-      const direct =
-        localStorage.getItem("user_email") ||
-        localStorage.getItem("email") ||
-        localStorage.getItem("auth_email");
-      if (direct) return direct;
-
-      const userRaw = localStorage.getItem("user");
-      if (userRaw) {
-        const user = JSON.parse(userRaw);
-        return user?.email || user?.correo || "";
-      }
-      return "";
-    } catch {
-      return "";
-    }
-  };
-
-  const fetchAllSolicitudes = async () => {
+  const fetchAllSolicitudes = useCallback(async () => {
     setLoading(true);
     try {
       const res = await api.get("/solicitudes");
@@ -209,14 +193,12 @@ export function SolicitudProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchMySolicitud = async (emailDemo = "esoto@ufidelitas.ac.cr") => {
+  const fetchMySolicitud = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get(`/solicitudes/me`, {
-        params: { email: emailDemo },
-      });
+      const res = await api.get("/solicitudes/me");
       const listApi = Array.isArray(res.data) ? res.data : [];
       const last = listApi[0] || null;
       const ui = last ? mapSolicitudFromApi(last) : null;
@@ -224,24 +206,35 @@ export function SolicitudProvider({ children }) {
       return ui;
     } catch (err) {
       console.error("Error cargando mi solicitud:", err);
+      setMySolicitud(null);
       throw err;
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchSolicitudDetalle = async (id) => {
+  const fetchSolicitudDetalle = useCallback(async (id) => {
     if (!id) return null;
+
     setLoading(true);
     try {
       const res = await api.get(`/solicitudes/${id}/detalle`);
       const ui = mapSolicitudDetalleFromApi(res.data);
 
-      if (mySolicitud?.id === id) setMySolicitud(ui);
+      setMySolicitud((prev) => {
+        if (!prev || prev.id === id) return ui;
+        return prev;
+      });
 
-      setSolicitudes((current) =>
-        (current || []).map((s) => (s?.id === id ? ui : s)),
-      );
+      setSolicitudes((current) => {
+        const exists = (current || []).some((s) => s?.id === id);
+
+        if (!exists) {
+          return [ui, ...(current || [])];
+        }
+
+        return (current || []).map((s) => (s?.id === id ? ui : s));
+      });
 
       return ui;
     } catch (err) {
@@ -250,9 +243,9 @@ export function SolicitudProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const addSolicitud = async (formData) => {
+  const addSolicitud = useCallback(async (formData) => {
     setLoading(true);
     try {
       const vencimientoPorDefecto = new Date(
@@ -305,8 +298,6 @@ export function SolicitudProvider({ children }) {
         cronograma_items: cronogramaItems,
 
         vencimiento: formData.vencimiento || vencimientoPorDefecto,
-
-        owner_email: "esoto@ufidelitas.ac.cr",
       };
 
       const res = await api.post("/solicitudes", payload);
@@ -322,46 +313,164 @@ export function SolicitudProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const updateSolicitudStatus = async (
-    idInterno,
-    newStatus,
-    observation = "",
-  ) => {
-    try {
-      await api.patch(`/solicitudes/${idInterno}/status`, {
-        status: newStatus,
-        observation,
-      });
+  const resubmitSolicitud = useCallback(
+    async (idInterno, formData) => {
+      setLoading(true);
+      try {
+        const payload = {
+          institucion_id: formData.institucion_id || null,
+          institucion_nombre: formData.institucion || "",
 
-      setSolicitudes((current) =>
-        (current || []).map((s) =>
-          s?.id === idInterno
-            ? { ...s, status: newStatus, estado: newStatus }
-            : s,
-        ),
-      );
+          titulo_proyecto: formData.tituloProyecto || null,
+          descripcion_problema: formData.justificacion || "",
+          objetivo_general: formData.objetivoGeneral || "",
+          beneficiario: formData.beneficiarios || null,
+          estrategia_solucion: formData.estrategiaSolucion || null,
 
-      if (mySolicitud?.id === idInterno) {
-        setMySolicitud((prev) =>
-          prev ? { ...prev, status: newStatus, estado: newStatus } : prev,
+          objetivos_especificos_items: Array.isArray(
+            formData.objetivosEspecificosItems,
+          )
+            ? formData.objetivosEspecificosItems
+                .map((x) => String(x || "").trim())
+                .filter(Boolean)
+            : [],
+
+          cronograma_items: Array.isArray(formData.cronogramaItems)
+            ? formData.cronogramaItems
+                .map((r) => ({
+                  actividad: String(r?.actividad || "").trim(),
+                  tarea: String(r?.tarea || "").trim(),
+                  horas: String(r?.horas ?? "").trim(),
+                }))
+                .filter((r) => r.actividad && r.tarea && r.horas !== "")
+            : [],
+        };
+
+        const res = await api.patch(
+          `/solicitudes/${idInterno}/resubmit`,
+          payload,
         );
-      }
-    } catch (err) {
-      console.error("Error actualizando estado de solicitud:", err);
-      throw err;
-    }
-  };
 
-  // ADMIN – Asignar (coordinador)
-  const assignReviewer = async (idInterno, reviewerEmail) => {
+        const updated = mapSolicitudFromApi(res.data);
+
+        setSolicitudes((current) =>
+          (current || []).map((s) =>
+            s?.id === idInterno
+              ? {
+                  ...s,
+                  ...updated,
+                  estado: "En Revisión",
+                  status: "En Revisión",
+                }
+              : s,
+          ),
+        );
+
+        const detalle = await fetchSolicitudDetalle(idInterno);
+        setMySolicitud(detalle || updated);
+
+        return detalle || updated;
+      } catch (err) {
+        console.error("Error reenviando solicitud:", err);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchSolicitudDetalle],
+  );
+
+  const updateSolicitudStatus = useCallback(
+    async (idInterno, newStatus, observation = "") => {
+      try {
+        await api.patch(`/solicitudes/${idInterno}/status`, {
+          status: newStatus,
+          observation,
+        });
+
+        setSolicitudes((current) =>
+          (current || []).map((s) =>
+            s?.id === idInterno
+              ? { ...s, status: newStatus, estado: newStatus }
+              : s,
+          ),
+        );
+
+        if (mySolicitud?.id === idInterno) {
+          setMySolicitud((prev) =>
+            prev ? { ...prev, status: newStatus, estado: newStatus } : prev,
+          );
+        }
+      } catch (err) {
+        console.error("Error actualizando estado de solicitud:", err);
+        throw err;
+      }
+    },
+    [mySolicitud],
+  );
+
+  const returnSolicitudWithFlags = useCallback(
+    async (
+      idInterno,
+      payload = {
+        observation: "",
+        editableFlags: {
+          institucion: false,
+          proyecto: false,
+          objetivos: false,
+          cronograma: false,
+        },
+      },
+    ) => {
+      try {
+        const res = await api.patch(
+          `/solicitudes/${idInterno}/return`,
+          payload,
+        );
+
+        const updated = mapSolicitudFromApi(res.data?.solicitud || res.data);
+
+        setSolicitudes((current) =>
+          (current || []).map((s) =>
+            s?.id === idInterno ? { ...s, ...updated } : s,
+          ),
+        );
+
+        if (mySolicitud?.id === idInterno) {
+          setMySolicitud((prev) => (prev ? { ...prev, ...updated } : prev));
+        }
+
+        return res.data;
+      } catch (err) {
+        console.error("Error devolviendo solicitud con flags:", err);
+        throw err;
+      }
+    },
+    [mySolicitud],
+  );
+
+  const assignReviewer = useCallback(async (idInterno, reviewerEmail) => {
     try {
       await api.patch(`/solicitudes/${idInterno}/assign`, { reviewerEmail });
 
       setSolicitudes((current) =>
         (current || []).map((s) =>
-          s?.id === idInterno ? { ...s, assigned_to: reviewerEmail } : s,
+          s?.id === idInterno
+            ? {
+                ...s,
+                assigned_to: reviewerEmail,
+                estado:
+                  s?.estado === "Enviado" || s?.estado === "Observado"
+                    ? "En Revisión"
+                    : s?.estado,
+                status:
+                  s?.status === "Enviado" || s?.status === "Observado"
+                    ? "En Revisión"
+                    : s?.status,
+              }
+            : s,
         ),
       );
 
@@ -370,28 +479,39 @@ export function SolicitudProvider({ children }) {
       console.error("Error asignando revisor:", err);
       throw err;
     }
-  };
+  }, []);
 
-  // ✅ NUEVO: Tomar solicitud usando tu endpoint existente /assign
-  const takeSolicitud = async (idInterno) => {
-    const myEmail = getMyEmail();
-    if (!myEmail) throw new Error("No se encontró el email del coordinador.");
+  const takeSolicitud = useCallback(
+    async (idInterno) => {
+      const userRaw = localStorage.getItem("user");
+      const user = userRaw ? JSON.parse(userRaw) : null;
+      const myEmail = user?.email || user?.correo || "";
 
-    // reutilizamos assignReviewer (mismo endpoint)
-    await assignReviewer(idInterno, myEmail);
+      if (!myEmail) {
+        throw new Error("No se encontró el email del coordinador.");
+      }
 
-    // opcional: devolver el nuevo email asignado
-    return myEmail;
-  };
+      await assignReviewer(idInterno, myEmail);
+      return myEmail;
+    },
+    [assignReviewer],
+  );
 
-  // ✅ NUEVO: Delegar solicitud usando /assign
-  const delegateSolicitud = async (idInterno, newCoordinatorEmail) => {
-    if (!newCoordinatorEmail) throw new Error("Email destino requerido.");
-    await assignReviewer(idInterno, newCoordinatorEmail);
-    return newCoordinatorEmail;
-  };
+  const delegateSolicitud = useCallback(
+    async (idInterno, newCoordinatorEmail) => {
+      if (!newCoordinatorEmail) throw new Error("Email destino requerido.");
+      await assignReviewer(idInterno, newCoordinatorEmail);
+      return newCoordinatorEmail;
+    },
+    [assignReviewer],
+  );
 
-  const getMySolicitud = () => mySolicitud;
+  const clearSolicitudState = useCallback(() => {
+    setMySolicitud(null);
+    setSolicitudes([]);
+  }, []);
+
+  const getMySolicitud = useCallback(() => mySolicitud, [mySolicitud]);
 
   return (
     <SolicitudContext.Provider
@@ -403,16 +523,14 @@ export function SolicitudProvider({ children }) {
         fetchMySolicitud,
         fetchSolicitudDetalle,
         addSolicitud,
+        resubmitSolicitud,
         updateSolicitudStatus,
-
-        // ✅ nuevos
+        returnSolicitudWithFlags,
         takeSolicitud,
         delegateSolicitud,
-
-        // ✅ existente
         assignReviewer,
-
         getMySolicitud,
+        clearSolicitudState,
       }}
     >
       {children}
