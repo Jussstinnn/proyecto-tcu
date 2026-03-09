@@ -1,4 +1,3 @@
-// src/controllers/solicitud.controller.js
 const pool = require("../config/db");
 
 function generateCodigo() {
@@ -16,12 +15,36 @@ function toDateOnly(dateStr) {
   }
 }
 
+async function getRevisionFlagsBySolicitudId(solicitudId, db = pool) {
+  const [rows] = await db.query(
+    `SELECT
+      institucion_editable,
+      proyecto_editable,
+      objetivos_editable,
+      cronograma_editable,
+      comentario_revisor,
+      updated_by,
+      created_at,
+      updated_at
+     FROM solicitud_revision_flags
+     WHERE solicitud_id = ?
+     LIMIT 1`,
+    [solicitudId],
+  );
+
+  return rows[0] || null;
+}
+
 /**
  * Estudiante: obtener MIS solicitudes
  */
 async function getMySolicitudes(req, res) {
   try {
-    const ownerEmail = req.query.email || "esoto@ufidelitas.ac.cr";
+    const ownerEmail = String(req.user?.email || "").trim();
+
+    if (!ownerEmail) {
+      return res.json([]);
+    }
 
     const [rows] = await pool.query(
       `SELECT *
@@ -31,10 +54,10 @@ async function getMySolicitudes(req, res) {
       [ownerEmail],
     );
 
-    res.json(rows);
+    return res.json(rows);
   } catch (err) {
     console.error("Error getMySolicitudes:", err);
-    res.status(500).json({ message: "Error en el servidor" });
+    return res.status(500).json({ message: "Error en el servidor" });
   }
 }
 
@@ -48,18 +71,16 @@ async function getAllSolicitudes(req, res) {
        FROM solicitudes
        ORDER BY created_at DESC`,
     );
-    res.json(rows);
+
+    return res.json(rows);
   } catch (err) {
     console.error("Error getAllSolicitudes:", err);
-    res.status(500).json({ message: "Error en el servidor" });
+    return res.status(500).json({ message: "Error en el servidor" });
   }
 }
 
 /**
  * Crear solicitud (Estudiante)
- * - usa solicitudes.descripcion_problema
- * - guarda objetivos en solicitud_objetivos_especificos
- * - guarda cronograma en solicitud_cronograma
  */
 async function createSolicitud(req, res) {
   const {
@@ -79,10 +100,10 @@ async function createSolicitud(req, res) {
 
     titulo_proyecto,
     descripcion_problema,
-    justificacion, // compat
+    justificacion,
 
     objetivo_general,
-    objetivos_especificos, // legacy opcional
+    objetivos_especificos,
     beneficiario,
     estrategia_solucion,
 
@@ -118,16 +139,23 @@ async function createSolicitud(req, res) {
     });
   }
 
-  const ownerUserId = ownerUserIdBody || 1;
-  const ownerEmail = ownerEmailBody || "esoto@ufidelitas.ac.cr";
+  const ownerUserId = ownerUserIdBody || req.user?.id || null;
+  const ownerEmail = String(ownerEmailBody || req.user?.email || "").trim();
+
+  if (!ownerEmail) {
+    return res.status(400).json({
+      message: "owner_email es requerido",
+    });
+  }
+
   const codigo_publico = generateCodigo();
   const vencimientoDate = toDateOnly(vencimiento);
 
   const conn = await pool.getConnection();
+
   try {
     await conn.beginTransaction();
 
-    // 1) Insert principal
     const [result] = await conn.query(
       `INSERT INTO solicitudes (
         codigo_publico,
@@ -190,7 +218,6 @@ async function createSolicitud(req, res) {
 
     const solicitudId = result.insertId;
 
-    // 2) Objetivos específicos (tabla hija)
     const objetivosArr = Array.isArray(objetivos_especificos_items)
       ? objetivos_especificos_items
       : [];
@@ -205,6 +232,7 @@ async function createSolicitud(req, res) {
         i + 1,
         desc,
       ]);
+
       await conn.query(
         `INSERT INTO solicitud_objetivos_especificos (solicitud_id, orden, descripcion)
          VALUES ?`,
@@ -212,7 +240,6 @@ async function createSolicitud(req, res) {
       );
     }
 
-    // 3) Cronograma (tabla hija)
     const cronoArr = Array.isArray(cronograma_items) ? cronograma_items : [];
     const cronoClean = cronoArr
       .map((r) => ({
@@ -238,7 +265,6 @@ async function createSolicitud(req, res) {
       );
     }
 
-    // 4) History
     await conn.query(
       `INSERT INTO solicitud_history (solicitud_id, accion, usuario, mensaje)
        VALUES (?,?,?,?)`,
@@ -255,11 +281,12 @@ async function createSolicitud(req, res) {
     const [rows] = await pool.query("SELECT * FROM solicitudes WHERE id = ?", [
       solicitudId,
     ]);
-    res.status(201).json(rows[0]);
+
+    return res.status(201).json(rows[0]);
   } catch (err) {
     await conn.rollback();
     console.error("Error createSolicitud:", err);
-    res.status(500).json({
+    return res.status(500).json({
       message: "Error en el servidor al crear solicitud",
       error: err.message,
     });
@@ -308,15 +335,18 @@ async function getSolicitudDetalle(req, res) {
       [id],
     );
 
-    res.json({
+    const revisionFlags = await getRevisionFlagsBySolicitudId(id);
+
+    return res.json({
       solicitud: solRows[0],
       objetivos,
       cronograma,
       history,
+      revision_flags: revisionFlags,
     });
   } catch (err) {
     console.error("Error getSolicitudDetalle:", err);
-    res.status(500).json({ message: "Error en el servidor" });
+    return res.status(500).json({ message: "Error en el servidor" });
   }
 }
 
@@ -326,28 +356,28 @@ async function updateStatus(req, res) {
 
   try {
     await pool.query(
-      "UPDATE solicitudes SET estado = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      `UPDATE solicitudes
+       SET estado = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
       [status, id],
     );
+
+    const actorEmail = req.user?.email || "sistema@ufide.ac.cr";
 
     await pool.query(
       `INSERT INTO solicitud_history (solicitud_id, accion, usuario, mensaje)
        VALUES (?,?,?,?)`,
-      [
-        id,
-        `Estado cambiado a: ${status}`,
-        "admin@ufidelitas.ac.cr",
-        observation || "",
-      ],
+      [id, `Estado cambiado a: ${status}`, actorEmail, observation || ""],
     );
 
     const [rows] = await pool.query("SELECT * FROM solicitudes WHERE id = ?", [
       id,
     ]);
-    res.json(rows[0]);
+
+    return res.json(rows[0]);
   } catch (err) {
     console.error("Error updateStatus:", err);
-    res.status(500).json({ message: "Error en el servidor" });
+    return res.status(500).json({ message: "Error en el servidor" });
   }
 }
 
@@ -362,10 +392,18 @@ async function assignReviewer(req, res) {
   try {
     await pool.query(
       `UPDATE solicitudes
-       SET assigned_to = ?, assign_date = NOW(), updated_at = CURRENT_TIMESTAMP
+       SET assigned_to = ?,
+           assign_date = NOW(),
+           estado = CASE
+             WHEN estado IN ('Enviado', 'Observado') THEN 'En Revisión'
+             ELSE estado
+           END,
+           updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
       [reviewerEmail, id],
     );
+
+    const actorEmail = req.user?.email || "sistema@ufide.ac.cr";
 
     await pool.query(
       `INSERT INTO solicitud_history (solicitud_id, accion, usuario, mensaje)
@@ -373,7 +411,7 @@ async function assignReviewer(req, res) {
       [
         id,
         "Solicitud asignada a revisor",
-        "admin@ufidelitas.ac.cr",
+        actorEmail,
         `Asignada a: ${reviewerEmail}`,
       ],
     );
@@ -381,10 +419,299 @@ async function assignReviewer(req, res) {
     const [rows] = await pool.query("SELECT * FROM solicitudes WHERE id = ?", [
       id,
     ]);
-    res.json(rows[0]);
+
+    return res.json(rows[0]);
   } catch (err) {
     console.error("Error assignReviewer:", err);
-    res.status(500).json({ message: "Error en el servidor" });
+    return res.status(500).json({ message: "Error en el servidor" });
+  }
+}
+
+async function returnSolicitudWithFlags(req, res) {
+  const { id } = req.params;
+  const { observation, editableFlags } = req.body;
+
+  const actorEmail = req.user?.email || "sistema@ufide.ac.cr";
+
+  if (!observation || !String(observation).trim()) {
+    return res.status(400).json({
+      message: "La observación es requerida para devolver la solicitud.",
+    });
+  }
+
+  const flags = {
+    institucion_editable: editableFlags?.institucion ? 1 : 0,
+    proyecto_editable: editableFlags?.proyecto ? 1 : 0,
+    objetivos_editable: editableFlags?.objetivos ? 1 : 0,
+    cronograma_editable: editableFlags?.cronograma ? 1 : 0,
+  };
+
+  if (
+    !flags.institucion_editable &&
+    !flags.proyecto_editable &&
+    !flags.objetivos_editable &&
+    !flags.cronograma_editable
+  ) {
+    return res.status(400).json({
+      message: "Debes habilitar al menos una sección para corrección.",
+    });
+  }
+
+  const conn = await pool.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    await conn.query(
+      `UPDATE solicitudes
+       SET estado = 'Observado',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [id],
+    );
+
+    await conn.query(
+      `INSERT INTO solicitud_revision_flags (
+        solicitud_id,
+        institucion_editable,
+        proyecto_editable,
+        objetivos_editable,
+        cronograma_editable,
+        comentario_revisor,
+        updated_by
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        institucion_editable = VALUES(institucion_editable),
+        proyecto_editable = VALUES(proyecto_editable),
+        objetivos_editable = VALUES(objetivos_editable),
+        cronograma_editable = VALUES(cronograma_editable),
+        comentario_revisor = VALUES(comentario_revisor),
+        updated_by = VALUES(updated_by),
+        updated_at = CURRENT_TIMESTAMP`,
+      [
+        id,
+        flags.institucion_editable,
+        flags.proyecto_editable,
+        flags.objetivos_editable,
+        flags.cronograma_editable,
+        String(observation).trim(),
+        actorEmail,
+      ],
+    );
+
+    await conn.query(
+      `INSERT INTO solicitud_history (solicitud_id, accion, usuario, mensaje)
+       VALUES (?, ?, ?, ?)`,
+      [
+        id,
+        "Solicitud devuelta con observaciones",
+        actorEmail,
+        `Secciones habilitadas: ${
+          [
+            flags.institucion_editable ? "Institución" : null,
+            flags.proyecto_editable ? "Proyecto" : null,
+            flags.objetivos_editable ? "Objetivos" : null,
+            flags.cronograma_editable ? "Cronograma" : null,
+          ]
+            .filter(Boolean)
+            .join(", ") || "Ninguna"
+        }. Observación: ${String(observation).trim()}`,
+      ],
+    );
+
+    await conn.commit();
+
+    const [rows] = await pool.query(`SELECT * FROM solicitudes WHERE id = ?`, [
+      id,
+    ]);
+
+    return res.json(rows[0]);
+  } catch (err) {
+    await conn.rollback();
+    console.error("Error returnSolicitudWithFlags:", err);
+    return res.status(500).json({
+      message: "Error en el servidor",
+      error: err.message,
+    });
+  } finally {
+    conn.release();
+  }
+}
+
+async function resubmitSolicitud(req, res) {
+  const { id } = req.params;
+  const actorEmail = req.user?.email || "sistema@ufide.ac.cr";
+
+  const {
+    institucion_id,
+    institucion_nombre,
+    titulo_proyecto,
+    descripcion_problema,
+    justificacion,
+    objetivo_general,
+    beneficiario,
+    estrategia_solucion,
+    objetivos_especificos_items,
+    cronograma_items,
+  } = req.body;
+
+  const descProblema = String(
+    descripcion_problema || justificacion || "",
+  ).trim();
+
+  const conn = await pool.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    const revisionFlags = await getRevisionFlagsBySolicitudId(id, conn);
+
+    if (!revisionFlags) {
+      await conn.rollback();
+      return res.status(400).json({
+        message:
+          "La solicitud no tiene observaciones configuradas para reenviar.",
+      });
+    }
+
+    const updateFields = [];
+    const updateValues = [];
+
+    if (revisionFlags.institucion_editable) {
+      updateFields.push("institucion_id = ?", "institucion_nombre = ?");
+      updateValues.push(institucion_id || null, institucion_nombre || "");
+    }
+
+    if (revisionFlags.proyecto_editable) {
+      updateFields.push(
+        "titulo_proyecto = ?",
+        "descripcion_problema = ?",
+        "objetivo_general = ?",
+        "beneficiario = ?",
+        "estrategia_solucion = ?",
+      );
+      updateValues.push(
+        titulo_proyecto || null,
+        descProblema || "",
+        objetivo_general || "",
+        beneficiario || null,
+        estrategia_solucion || null,
+      );
+    }
+
+    if (updateFields.length) {
+      updateFields.push("estado = 'En Revisión'");
+      updateFields.push("updated_at = CURRENT_TIMESTAMP");
+
+      await conn.query(
+        `UPDATE solicitudes
+         SET ${updateFields.join(", ")}
+         WHERE id = ?`,
+        [...updateValues, id],
+      );
+    } else {
+      await conn.query(
+        `UPDATE solicitudes
+         SET estado = 'En Revisión',
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [id],
+      );
+    }
+
+    if (revisionFlags.objetivos_editable) {
+      await conn.query(
+        `DELETE FROM solicitud_objetivos_especificos WHERE solicitud_id = ?`,
+        [id],
+      );
+
+      const objetivosClean = (
+        Array.isArray(objetivos_especificos_items)
+          ? objetivos_especificos_items
+          : []
+      )
+        .map((x) => String(x || "").trim())
+        .filter(Boolean);
+
+      await conn.query(
+        `UPDATE solicitudes
+         SET objetivos_especificos = ?
+         WHERE id = ?`,
+        [objetivosClean.join("\n"), id],
+      );
+
+      if (objetivosClean.length) {
+        const values = objetivosClean.map((desc, i) => [id, i + 1, desc]);
+
+        await conn.query(
+          `INSERT INTO solicitud_objetivos_especificos (solicitud_id, orden, descripcion)
+           VALUES ?`,
+          [values],
+        );
+      }
+    }
+
+    if (revisionFlags.cronograma_editable) {
+      await conn.query(
+        `DELETE FROM solicitud_cronograma WHERE solicitud_id = ?`,
+        [id],
+      );
+
+      const cronoClean = (
+        Array.isArray(cronograma_items) ? cronograma_items : []
+      )
+        .map((r) => ({
+          actividad: String(r?.actividad || "").trim(),
+          tarea: String(r?.tarea || "").trim(),
+          horas: parseInt(String(r?.horas ?? "").trim(), 10),
+        }))
+        .filter((r) => r.actividad && r.tarea && Number.isFinite(r.horas));
+
+      if (cronoClean.length) {
+        const values = cronoClean.map((r, i) => [
+          id,
+          i + 1,
+          r.actividad,
+          r.tarea,
+          r.horas,
+        ]);
+
+        await conn.query(
+          `INSERT INTO solicitud_cronograma (solicitud_id, orden, actividad, tarea, horas)
+           VALUES ?`,
+          [values],
+        );
+      }
+    }
+
+    await conn.query(
+      `INSERT INTO solicitud_history (solicitud_id, accion, usuario, mensaje)
+       VALUES (?, ?, ?, ?)`,
+      [
+        id,
+        "Solicitud corregida y reenviada",
+        actorEmail,
+        "El estudiante actualizó las secciones observadas y reenvió el anteproyecto.",
+      ],
+    );
+
+    await conn.commit();
+
+    const [rows] = await pool.query(`SELECT * FROM solicitudes WHERE id = ?`, [
+      id,
+    ]);
+
+    return res.json(rows[0]);
+  } catch (err) {
+    await conn.rollback();
+    console.error("Error resubmitSolicitud:", err);
+    return res.status(500).json({
+      message: "Error en el servidor",
+      error: err.message,
+    });
+  } finally {
+    conn.release();
   }
 }
 
@@ -395,4 +722,6 @@ module.exports = {
   getSolicitudDetalle,
   updateStatus,
   assignReviewer,
+  returnSolicitudWithFlags,
+  resubmitSolicitud,
 };

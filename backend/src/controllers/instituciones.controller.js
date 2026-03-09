@@ -45,7 +45,7 @@ async function createInstitucionPublic(req, res) {
   if (!nombre || !cedula_juridica || !supervisor_nombre || !supervisor_email) {
     return res.status(400).json({
       message:
-        "nombre, cedula_juridica, supervisor_nombre y supervisor_email son requeridos",
+        "nombre, cedula_juridica, supervisor_nombre, supervisor_email y contacto_email son requeridos",
     });
   }
 

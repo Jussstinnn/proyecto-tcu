@@ -35,6 +35,7 @@ router.get("/me", authRequired, async (req, res) => {
        LIMIT 1`,
       [req.user.id],
     );
+
     res.json(rows[0] || null);
   } catch (err) {
     console.error("Error user/me:", err);
@@ -45,6 +46,7 @@ router.get("/me", authRequired, async (req, res) => {
 router.patch("/me", authRequired, async (req, res) => {
   try {
     const {
+      cedula,
       carrera,
       sede,
       phone,
@@ -56,7 +58,8 @@ router.patch("/me", authRequired, async (req, res) => {
 
     await pool.query(
       `UPDATE users
-       SET carrera = ?,
+       SET cedula = ?,
+           carrera = ?,
            sede = ?,
            phone = ?,
            oficio = ?,
@@ -66,6 +69,7 @@ router.patch("/me", authRequired, async (req, res) => {
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
       [
+        cedula || null,
         carrera || null,
         sede || null,
         phone || null,
@@ -92,7 +96,24 @@ router.patch("/me", authRequired, async (req, res) => {
   }
 });
 
-// ✅ cambiar rol (solo COORD)
+// Listar coordinadores
+router.get("/coords/list", authRequired, async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, nombre, email, role, sede
+       FROM users
+       WHERE role = 'COORD' AND is_active = 1
+       ORDER BY nombre ASC, email ASC`,
+    );
+
+    res.json(rows || []);
+  } catch (err) {
+    console.error("Error listando coordinadores:", err);
+    res.status(500).json({ message: "Error en servidor" });
+  }
+});
+
+// Cambiar rol (solo COORD)
 router.patch("/:id/role", authRequired, coordOnly, async (req, res) => {
   const { id } = req.params;
   const role = String(req.body.role || "")
@@ -105,18 +126,39 @@ router.patch("/:id/role", authRequired, coordOnly, async (req, res) => {
 
   try {
     await pool.query(
-      `UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      `UPDATE users
+       SET role = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
       [role, id],
     );
 
     const [rows] = await pool.query(
-      `SELECT id, nombre, email, role FROM users WHERE id = ? LIMIT 1`,
+      `SELECT id, nombre, email, role
+       FROM users
+       WHERE id = ?
+       LIMIT 1`,
       [id],
     );
 
     res.json(rows[0] || null);
   } catch (err) {
     console.error("Error update role:", err);
+    res.status(500).json({ message: "Error en servidor" });
+  }
+});
+
+// Listar usuarios
+router.get("/list/all", authRequired, async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, nombre, email, cedula, carrera, role, sede, is_active, created_at
+       FROM users
+       ORDER BY nombre ASC, email ASC`,
+    );
+
+    res.json(rows || []);
+  } catch (err) {
+    console.error("Error listando usuarios:", err);
     res.status(500).json({ message: "Error en servidor" });
   }
 });
