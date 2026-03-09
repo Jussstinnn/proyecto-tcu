@@ -1,12 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   LuLayoutDashboard,
   LuTicket,
-  LuUsers,
-  LuFile,
-  LuCalendar,
-  LuSettings,
+  LuFileText,
+  LuUserCheck,
+  LuBuilding,
+  LuLogOut,
+  LuEye,
+  LuBadgeCheck,
+  LuBan,
 } from "react-icons/lu";
+import { toast } from "sonner";
+import { useAuth } from "../contexts/AuthContext.jsx";
 import InstitutionModal from "../components/InstitutionModal";
 import api from "../api/apiClient";
 
@@ -18,37 +23,45 @@ const getStatusClass = (status) => {
       return "bg-yellow-100 text-yellow-700";
     case "Rechazada":
       return "bg-red-100 text-red-700";
+    case "Deshabilitada":
+      return "bg-slate-200 text-slate-700";
     default:
       return "bg-slate-100 text-slate-700";
   }
 };
 
-// Normalizar lo que venga del backend
 function mapInstitutionFromApi(apiInst) {
   if (!apiInst) return null;
 
   return {
     id: apiInst.id,
-    nombre: apiInst.nombre || apiInst.name || "",
-    contacto_email: apiInst.contacto_email || apiInst.contact || "",
-    tipo_servicio: apiInst.tipo_servicio || apiInst.type || "",
+    nombre: apiInst.nombre || "",
+    cedula_juridica: apiInst.cedula_juridica || "",
+    supervisor_nombre: apiInst.supervisor_nombre || "",
+    supervisor_cargo: apiInst.supervisor_cargo || "",
+    supervisor_email: apiInst.supervisor_email || "",
+    contacto_email: apiInst.contacto_email || "",
+    tipo_servicio: apiInst.tipo_servicio || "",
     estado: apiInst.estado || "Pendiente",
+    created_at: apiInst.created_at || null,
+    updated_at: apiInst.updated_at || null,
+    _raw: apiInst,
   };
 }
 
 export default function InstitutionsPage() {
+  const { user, logout } = useAuth();
+
   const [institutions, setInstitutions] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedInstitution, setSelectedInstitution] = useState(null);
 
-  // ====== FILTROS ======
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
 
-  // Cargar instituciones desde el backend
   const fetchInstitutions = async () => {
     setLoading(true);
     try {
@@ -58,6 +71,7 @@ export default function InstitutionsPage() {
       setInstitutions(listUi);
     } catch (err) {
       console.error("Error cargando instituciones:", err);
+      toast.error("No se pudieron cargar las instituciones.");
     } finally {
       setLoading(false);
     }
@@ -67,7 +81,7 @@ export default function InstitutionsPage() {
     fetchInstitutions();
   }, []);
 
-  const openModal = (institution) => {
+  const openModal = (institution = null) => {
     setSelectedInstitution(institution);
     setIsModalOpen(true);
   };
@@ -78,100 +92,204 @@ export default function InstitutionsPage() {
   };
 
   const handleApprove = async (id) => {
+    const t = toast.loading("Aprobando institución...");
     try {
       const res = await api.patch(`/instituciones/${id}/status`, {
         estado: "Aprobada",
       });
+
       const updated = mapInstitutionFromApi(res.data);
       setInstitutions((current) =>
-        current.map((inst) => (inst.id === updated.id ? updated : inst))
+        current.map((inst) => (inst.id === updated.id ? updated : inst)),
       );
+
+      toast.success("Institución aprobada correctamente.", { id: t });
     } catch (err) {
       console.error("Error aprobando institución:", err);
+      toast.error("No se pudo aprobar la institución.", { id: t });
     }
   };
 
   const handleReject = async (id) => {
+    const t = toast.loading("Rechazando institución...");
     try {
       const res = await api.patch(`/instituciones/${id}/status`, {
         estado: "Rechazada",
       });
+
       const updated = mapInstitutionFromApi(res.data);
       setInstitutions((current) =>
-        current.map((inst) => (inst.id === updated.id ? updated : inst))
+        current.map((inst) => (inst.id === updated.id ? updated : inst)),
       );
+
+      toast.success("Institución rechazada.", { id: t });
     } catch (err) {
       console.error("Error rechazando institución:", err);
+      toast.error("No se pudo rechazar la institución.", { id: t });
     }
   };
 
-  // Guardar desde el modal (crear / editar)
+  const handleToggleEnabled = async (institution) => {
+    if (!institution?.id) return;
+
+    const nextStatus =
+      institution.estado === "Aprobada" ? "Deshabilitada" : "Aprobada";
+
+    const t = toast.loading(
+      nextStatus === "Aprobada"
+        ? "Habilitando institución..."
+        : "Deshabilitando institución...",
+    );
+
+    try {
+      const res = await api.patch(`/instituciones/${institution.id}/status`, {
+        estado: nextStatus,
+      });
+
+      const updated = mapInstitutionFromApi(res.data);
+      setInstitutions((current) =>
+        current.map((inst) => (inst.id === updated.id ? updated : inst)),
+      );
+
+      if (selectedInstitution?.id === institution.id) {
+        setSelectedInstitution(updated);
+      }
+
+      toast.success(
+        nextStatus === "Aprobada"
+          ? "Institución habilitada."
+          : "Institución deshabilitada.",
+        { id: t },
+      );
+    } catch (err) {
+      console.error("Error cambiando estado de institución:", err);
+      toast.error("No se pudo actualizar el estado.", { id: t });
+    }
+  };
+
   const handleSave = async (formData, id) => {
+    const payload = {
+      nombre: formData.nombre?.trim() || "",
+      cedula_juridica: formData.cedula_juridica?.trim() || "",
+      supervisor_nombre: formData.supervisor_nombre?.trim() || "",
+      supervisor_cargo: formData.supervisor_cargo?.trim() || "",
+      supervisor_email: formData.supervisor_email?.trim() || "",
+      contacto_email: formData.contacto_email?.trim() || "",
+      tipo_servicio: formData.tipo_servicio?.trim() || "",
+      estado: formData.estado || "Pendiente",
+    };
+
+    if (
+      !payload.nombre ||
+      !payload.cedula_juridica ||
+      !payload.supervisor_nombre ||
+      !payload.supervisor_email
+    ) {
+      toast.error(
+        "Nombre, cédula jurídica, supervisor y correo del supervisor son requeridos.",
+      );
+      return;
+    }
+
+    const t = toast.loading(
+      id ? "Actualizando institución..." : "Registrando institución...",
+    );
+
     try {
       if (id) {
-        const payload = {
-          nombre: formData.nombre,
-          contacto_email: formData.contacto_email,
-          tipo_servicio: formData.tipo_servicio,
-        };
         const res = await api.put(`/instituciones/${id}`, payload);
         const updated = mapInstitutionFromApi(res.data);
+
         setInstitutions((current) =>
-          current.map((inst) => (inst.id === updated.id ? updated : inst))
+          current.map((inst) => (inst.id === updated.id ? updated : inst)),
         );
       } else {
-        // crear
-        const payload = {
-          nombre: formData.nombre,
-          contacto_email: formData.contacto_email,
-          tipo_servicio: formData.tipo_servicio,
-          estado: "Aprobada",
-        };
         const res = await api.post("/instituciones", payload);
         const nueva = mapInstitutionFromApi(res.data);
+
         setInstitutions((current) => [nueva, ...current]);
       }
+
+      toast.success(
+        id
+          ? "Institución actualizada correctamente."
+          : "Institución registrada correctamente.",
+        { id: t },
+      );
       closeModal();
     } catch (err) {
       console.error("Error guardando institución:", err);
-      alert("No se pudo guardar la institución. Intente de nuevo.");
+      const msg =
+        err?.response?.data?.message ||
+        "No se pudo guardar la institución. Intenta de nuevo.";
+      toast.error(msg, { id: t });
     }
   };
 
-  // ====== APLICAR FILTROS ======
-  const filteredInstitutions = institutions.filter((inst) => {
-    const searchText = search.toLowerCase();
+  const filteredInstitutions = useMemo(() => {
+    const searchText = search.toLowerCase().trim();
 
-    const matchesSearch =
-      !searchText ||
-      inst.nombre.toLowerCase().includes(searchText) ||
-      inst.contacto_email.toLowerCase().includes(searchText) ||
-      (inst.tipo_servicio || "").toLowerCase().includes(searchText);
+    return institutions.filter((inst) => {
+      const matchesSearch =
+        !searchText ||
+        String(inst.nombre || "")
+          .toLowerCase()
+          .includes(searchText) ||
+        String(inst.cedula_juridica || "")
+          .toLowerCase()
+          .includes(searchText) ||
+        String(inst.supervisor_nombre || "")
+          .toLowerCase()
+          .includes(searchText) ||
+        String(inst.supervisor_email || "")
+          .toLowerCase()
+          .includes(searchText) ||
+        String(inst.contacto_email || "")
+          .toLowerCase()
+          .includes(searchText) ||
+        String(inst.tipo_servicio || "")
+          .toLowerCase()
+          .includes(searchText);
 
-    const matchesStatus =
-      statusFilter === "all" || inst.estado === statusFilter;
+      const matchesStatus =
+        statusFilter === "all" || inst.estado === statusFilter;
 
-    const matchesType =
-      typeFilter === "all" ||
-      (inst.tipo_servicio || "").toLowerCase() === typeFilter.toLowerCase();
+      const matchesType =
+        typeFilter === "all" ||
+        String(inst.tipo_servicio || "").toLowerCase() ===
+          String(typeFilter).toLowerCase();
 
-    return matchesSearch && matchesStatus && matchesType;
-  });
+      return matchesSearch && matchesStatus && matchesType;
+    });
+  }, [institutions, search, statusFilter, typeFilter]);
 
   const uniqueTypes = Array.from(
-    new Set(institutions.map((i) => i.tipo_servicio).filter(Boolean))
+    new Set(institutions.map((i) => i.tipo_servicio).filter(Boolean)),
   );
 
-  // ====== RESÚMENES ======
   const total = institutions.length;
   const approved = institutions.filter((i) => i.estado === "Aprobada").length;
   const pending = institutions.filter((i) => i.estado === "Pendiente").length;
   const rejected = institutions.filter((i) => i.estado === "Rechazada").length;
+  const disabled = institutions.filter(
+    (i) => i.estado === "Deshabilitada",
+  ).length;
+
+  const displayName = user?.nombre || "Coordinación TCU";
+  const displayEmail = user?.email || "coordinacion.tcu@ufide.ac.cr";
+
+  const getInitials = (nameOrEmail) => {
+    const text = String(nameOrEmail || "").trim();
+    if (!text) return "IN";
+    if (text.includes("@")) return text.slice(0, 2).toUpperCase();
+    const parts = text.split(" ").filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return `${parts[0][0] || ""}${parts[1][0] || ""}`.toUpperCase();
+  };
 
   return (
     <>
       <div className="min-h-screen bg-slate-100 flex">
-        {/* SIDEBAR (igual estilo que AdminDashboard) */}
         <aside className="w-64 bg-white border-r border-slate-200 shadow-sm hidden md:flex flex-col">
           <div className="h-16 flex items-center px-6 border-b border-slate-200">
             <div className="w-9 h-9 rounded-xl bg-[rgba(2,14,159,1)] flex items-center justify-center text-white font-bold mr-3">
@@ -190,33 +308,42 @@ export default function InstitutionsPage() {
           <nav className="flex-1 p-4 space-y-1 text-sm">
             <SidebarItem
               icon={LuLayoutDashboard}
-              label="Dashboard"
+              label="Dashboard Solicitudes"
               href="/admin"
             />
             <SidebarItem
-              icon={LuTicket}
-              label="Solicitudes (Tickets)"
-              href="/admin"
-            />
-            <SidebarItem
-              icon={LuUsers}
+              icon={LuBuilding}
               label="Instituciones"
               href="/instituciones"
               active
             />
-            <SidebarItem icon={LuFile} label="Reportes" />
-            <SidebarItem icon={LuCalendar} label="Calendario" />
-            <SidebarItem icon={LuSettings} label="Configuración" />
+            <SidebarItem icon={LuFileText} label="Reportes" href="/reportes" />
+            <SidebarItem
+              icon={LuUserCheck}
+              label="Coordinadores"
+              href="/coordinadores"
+            />
           </nav>
+
+          <div className="p-4 border-t border-slate-200">
+            <button
+              onClick={() => {
+                logout();
+                window.location.href = "/login";
+              }}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
+            >
+              <LuLogOut className="text-lg" />
+              Cerrar sesión
+            </button>
+          </div>
 
           <div className="p-4 border-t border-slate-200 text-[11px] text-slate-500">
             © {new Date().getFullYear()} Universidad Fidélitas
           </div>
         </aside>
 
-        {/* CONTENEDOR PRINCIPAL */}
         <div className="flex-1 flex flex-col">
-          {/* TOPBAR */}
           <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6">
             <div>
               <p className="text-xs text-slate-500 uppercase tracking-wide">
@@ -227,18 +354,28 @@ export default function InstitutionsPage() {
               </p>
             </div>
 
-            <button
-              onClick={() => openModal(null)}
-              className="px-4 py-2 bg-[rgba(2,14,159,1)] text-white text-xs md:text-sm font-semibold rounded-xl shadow-sm hover:bg-indigo-900"
-            >
-              + Registrar institución
-            </button>
+            <div className="flex items-center gap-4">
+              <div className="text-right hidden sm:block">
+                <p className="text-xs font-semibold text-slate-700">
+                  {displayName}
+                </p>
+                <p className="text-[11px] text-slate-500">{displayEmail}</p>
+              </div>
+              <div className="w-9 h-9 rounded-full bg-slate-800 text-white flex items-center justify-center text-xs font-bold">
+                {getInitials(displayName)}
+              </div>
+
+              <button
+                onClick={() => openModal(null)}
+                className="px-4 py-2 bg-[rgba(2,14,159,1)] text-white text-xs md:text-sm font-semibold rounded-xl shadow-sm hover:bg-indigo-900"
+              >
+                + Registrar institución
+              </button>
+            </div>
           </header>
 
-          {/* CONTENIDO */}
           <main className="flex-1 p-4 md:p-6 overflow-y-auto space-y-6">
-            {/* TARJETAS RESUMEN */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
               <SummaryCard
                 title="Total instituciones"
                 value={total}
@@ -247,45 +384,49 @@ export default function InstitutionsPage() {
               <SummaryCard title="Aprobadas" value={approved} color="green" />
               <SummaryCard title="Pendientes" value={pending} color="yellow" />
               <SummaryCard title="Rechazadas" value={rejected} color="red" />
+              <SummaryCard
+                title="Deshabilitadas"
+                value={disabled}
+                color="slate"
+              />
             </div>
 
-            {/* TABLA + FILTROS */}
             <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-              {/* Header + filtros */}
               <div className="px-5 pt-4 pb-3 border-b border-slate-200 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <h2 className="text-sm font-semibold text-slate-900">
                     Instituciones registradas
                   </h2>
                   <p className="text-[11px] text-slate-500">
-                    Filtra por nombre, tipo de servicio o estado.
+                    Filtra por nombre, correo, supervisor, tipo o estado.
                   </p>
                 </div>
 
                 <div className="flex flex-wrap gap-3">
                   <input
                     type="text"
-                    placeholder="Buscar por nombre, contacto o tipo..."
+                    placeholder="Buscar por nombre, cédula, supervisor, correo o tipo..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-full md:w-72"
+                    className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-full md:w-[420px]"
                   />
 
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm w-[160px]"
+                    className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm w-[180px]"
                   >
                     <option value="all">Todos los estados</option>
                     <option value="Aprobada">Aprobadas</option>
                     <option value="Pendiente">Pendientes</option>
                     <option value="Rechazada">Rechazadas</option>
+                    <option value="Deshabilitada">Deshabilitadas</option>
                   </select>
 
                   <select
                     value={typeFilter}
                     onChange={(e) => setTypeFilter(e.target.value)}
-                    className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm w-[180px]"
+                    className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm w-[220px]"
                   >
                     <option value="all">Todos los tipos</option>
                     {uniqueTypes.map((t) => (
@@ -297,14 +438,14 @@ export default function InstitutionsPage() {
                 </div>
               </div>
 
-              {/* TABLA */}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500">
                     <tr>
-                      <th className="p-3 text-left">Nombre de institución</th>
-                      <th className="p-3 text-left">Contacto</th>
-                      <th className="p-3 text-left">Tipo de servicio</th>
+                      <th className="p-3 text-left">Institución</th>
+                      <th className="p-3 text-left">Supervisor</th>
+                      <th className="p-3 text-left">Correos</th>
+                      <th className="p-3 text-left">Tipo</th>
                       <th className="p-3 text-left">Estado</th>
                       <th className="p-3 text-left">Acciones</th>
                     </tr>
@@ -313,7 +454,7 @@ export default function InstitutionsPage() {
                     {loading && (
                       <tr>
                         <td
-                          colSpan={5}
+                          colSpan={6}
                           className="p-6 text-center text-sm text-slate-500"
                         >
                           Cargando instituciones...
@@ -327,49 +468,91 @@ export default function InstitutionsPage() {
                           key={inst.id}
                           className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
                         >
-                          <td className="p-3 text-slate-800 font-medium">
-                            {inst.nombre}
+                          <td className="p-3">
+                            <p className="text-slate-800 font-semibold">
+                              {inst.nombre}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">
+                              Cédula jurídica: {inst.cedula_juridica || "-"}
+                            </p>
                           </td>
+
                           <td className="p-3 text-slate-700">
-                            {inst.contacto_email}
+                            <p className="font-medium">
+                              {inst.supervisor_nombre || "-"}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">
+                              {inst.supervisor_cargo || "Sin cargo"}
+                            </p>
                           </td>
+
                           <td className="p-3 text-slate-700">
-                            {inst.tipo_servicio}
+                            <p>{inst.supervisor_email || "-"}</p>
+                            <p className="text-xs text-slate-500 mt-1">
+                              {inst.contacto_email || "-"}
+                            </p>
                           </td>
-                          <td className="p-3 text-sm">
+
+                          <td className="p-3 text-slate-700">
+                            {inst.tipo_servicio || "-"}
+                          </td>
+
+                          <td className="p-3">
                             <span
                               className={`px-3 py-1 rounded-full font-medium text-[11px] ${getStatusClass(
-                                inst.estado
+                                inst.estado,
                               )}`}
                             >
                               {inst.estado}
                             </span>
                           </td>
-                          <td className="p-3 text-sm text-slate-700 space-x-3">
-                            {inst.estado === "Pendiente" && (
-                              <>
-                                <button
-                                  onClick={() => handleApprove(inst.id)}
-                                  className="text-emerald-600 hover:text-emerald-800 font-semibold text-xs"
-                                >
-                                  Aprobar
-                                </button>
-                                <button
-                                  onClick={() => handleReject(inst.id)}
-                                  className="text-red-600 hover:text-red-800 font-semibold text-xs"
-                                >
-                                  Rechazar
-                                </button>
-                              </>
-                            )}
-                            {inst.estado !== "Pendiente" && (
+
+                          <td className="p-3">
+                            <div className="flex flex-wrap gap-2">
+                              {inst.estado === "Pendiente" && (
+                                <>
+                                  <button
+                                    onClick={() => handleApprove(inst.id)}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-700 hover:bg-emerald-200 font-semibold text-xs"
+                                  >
+                                    <LuBadgeCheck className="text-sm" />
+                                    Aprobar
+                                  </button>
+
+                                  <button
+                                    onClick={() => handleReject(inst.id)}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-red-100 text-red-700 hover:bg-red-200 font-semibold text-xs"
+                                  >
+                                    <LuBan className="text-sm" />
+                                    Rechazar
+                                  </button>
+                                </>
+                              )}
+
                               <button
                                 onClick={() => openModal(inst)}
-                                className="text-[rgba(2,14,159,1)] hover:underline font-semibold text-xs"
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[rgba(2,14,159,1)] font-semibold text-xs"
                               >
+                                <LuEye className="text-sm" />
                                 Ver / editar
                               </button>
-                            )}
+
+                              {inst.estado !== "Pendiente" &&
+                                inst.estado !== "Rechazada" && (
+                                  <button
+                                    onClick={() => handleToggleEnabled(inst)}
+                                    className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl font-semibold text-xs ${
+                                      inst.estado === "Aprobada"
+                                        ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                                        : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                                    }`}
+                                  >
+                                    {inst.estado === "Aprobada"
+                                      ? "Deshabilitar"
+                                      : "Habilitar"}
+                                  </button>
+                                )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -377,7 +560,7 @@ export default function InstitutionsPage() {
                     {!loading && filteredInstitutions.length === 0 && (
                       <tr>
                         <td
-                          colSpan={5}
+                          colSpan={6}
                           className="p-6 text-center text-sm text-slate-500"
                         >
                           No se encontraron instituciones con los filtros
@@ -393,7 +576,6 @@ export default function InstitutionsPage() {
         </div>
       </div>
 
-      {/* MODAL */}
       <InstitutionModal
         isOpen={isModalOpen}
         onClose={closeModal}
@@ -403,8 +585,6 @@ export default function InstitutionsPage() {
     </>
   );
 }
-
-/* ========= COMPONENTES DE APOYO ========= */
 
 function SidebarItem({ icon: Icon, label, active = false, href = "#" }) {
   const base =
@@ -427,6 +607,7 @@ function SummaryCard({ title, value, color }) {
     yellow: "bg-yellow-50 text-yellow-700",
     green: "bg-emerald-50 text-emerald-700",
     red: "bg-red-50 text-red-700",
+    slate: "bg-slate-100 text-slate-700",
   };
 
   return (
