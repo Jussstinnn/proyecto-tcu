@@ -15,6 +15,56 @@ function toDateOnly(dateStr) {
   }
 }
 
+function normalizeStatusLabel(status) {
+  const s = String(status || "").trim();
+
+  if (s === "Closed") return "Aprobado";
+  if (s === "Open") return "Enviado";
+  if (s === "En revisión") return "En Revisión";
+
+  return s || "Enviado";
+}
+
+function buildReportFilters(query = {}) {
+  const conditions = [];
+  const params = [];
+
+  if (query.from) {
+    conditions.push("DATE(s.created_at) >= ?");
+    params.push(query.from);
+  }
+
+  if (query.to) {
+    conditions.push("DATE(s.created_at) <= ?");
+    params.push(query.to);
+  }
+
+  if (query.status && query.status !== "all") {
+    conditions.push("s.estado = ?");
+    params.push(query.status);
+  }
+
+  if (query.search && String(query.search).trim()) {
+    const q = `%${String(query.search).trim()}%`;
+    conditions.push(`
+      (
+        s.codigo_publico LIKE ?
+        OR s.estudiante_nombre LIKE ?
+        OR s.titulo_proyecto LIKE ?
+        OR s.institucion_nombre LIKE ?
+        OR s.owner_email LIKE ?
+      )
+    `);
+    params.push(q, q, q, q, q);
+  }
+
+  const whereClause = conditions.length
+    ? `WHERE ${conditions.join(" AND ")}`
+    : "";
+
+  return { whereClause, params };
+}
+
 async function getRevisionFlagsBySolicitudId(solicitudId, db = pool) {
   const [rows] = await db.query(
     `SELECT
@@ -715,6 +765,174 @@ async function resubmitSolicitud(req, res) {
   }
 }
 
+/**
+ * Reportes para coordinación
+ * GET /solicitud/reportes?from=YYYY-MM-DD&to=YYYY-MM-DD&status=Aprobado&search=texto
+ */
+async function getSolicitudesReportes(req, res) {
+  try {
+    const { whereClause, params } = buildReportFilters(req.query);
+
+    const [rows] = await pool.query(
+      `
+      SELECT
+        s.id,
+        s.codigo_publico,
+        s.estudiante_nombre,
+        s.estudiante_cedula,
+        s.institucion_id,
+        s.institucion_nombre,
+        s.titulo_proyecto,
+        s.estado,
+        s.prioridad,
+        s.vencimiento,
+        s.owner_email,
+        s.assigned_to,
+        s.assign_date,
+        s.created_at,
+        s.updated_at
+      FROM solicitudes s
+      ${whereClause}
+      ORDER BY s.created_at DESC
+      `,
+      params,
+    );
+
+    const normalizedRows = rows.map((r) => ({
+      ...r,
+      estado_normalizado: normalizeStatusLabel(r.estado),
+    }));
+
+    const resumen = {
+      total: normalizedRows.length,
+      aprobados: normalizedRows.filter(
+        (r) => r.estado_normalizado === "Aprobado",
+      ).length,
+      rechazados: normalizedRows.filter(
+        (r) => r.estado_normalizado === "Rechazado",
+      ).length,
+      observados: normalizedRows.filter(
+        (r) => r.estado_normalizado === "Observado",
+      ).length,
+      pendientes: normalizedRows.filter((r) =>
+        ["Enviado", "En Revisión"].includes(r.estado_normalizado),
+      ).length,
+    };
+
+    const porInstitucionMap = new Map();
+    const porEstadoMap = new Map();
+    const porCoordinadorMap = new Map();
+    const pendientesMap = new Map();
+
+    for (const row of normalizedRows) {
+      const institucion = row.institucion_nombre || "Sin institución";
+      porInstitucionMap.set(
+        institucion,
+        (porInstitucionMap.get(institucion) || 0) + 1,
+      );
+
+      const estado = row.estado_normalizado || "Sin estado";
+      porEstadoMap.set(estado, (porEstadoMap.get(estado) || 0) + 1);
+
+      if (["Enviado", "En Revisión"].includes(estado)) {
+        pendientesMap.set(estado, (pendientesMap.get(estado) || 0) + 1);
+      }
+
+      const coordKey = row.assigned_to || "Sin asignar";
+
+      if (!porCoordinadorMap.has(coordKey)) {
+        porCoordinadorMap.set(coordKey, {
+          coordinador_email: row.assigned_to || null,
+          revisadas: 0,
+          aprobadas: 0,
+          rechazadas: 0,
+          observadas: 0,
+          pendientes: 0,
+        });
+      }
+
+      const coord = porCoordinadorMap.get(coordKey);
+
+      if (row.assigned_to) {
+        coord.revisadas += 1;
+      }
+
+      if (estado === "Aprobado") coord.aprobadas += 1;
+      else if (estado === "Rechazado") coord.rechazadas += 1;
+      else if (estado === "Observado") coord.observadas += 1;
+      else coord.pendientes += 1;
+    }
+
+    const porInstitucion = [...porInstitucionMap.entries()]
+      .map(([institucion, cantidad]) => ({ institucion, cantidad }))
+      .sort((a, b) => b.cantidad - a.cantidad);
+
+    const porEstado = [...porEstadoMap.entries()]
+      .map(([estado, cantidad]) => ({ estado, cantidad }))
+      .sort((a, b) => b.cantidad - a.cantidad);
+
+    const pendientesPorEstado = [...pendientesMap.entries()]
+      .map(([estado, cantidad]) => ({ estado, cantidad }))
+      .sort((a, b) => b.cantidad - a.cantidad);
+
+    let coordinadores = [];
+    try {
+      const [coords] = await pool.query(
+        `
+        SELECT id, nombre, email, role, sede
+        FROM users
+        WHERE role = 'COORD'
+        `,
+      );
+      coordinadores = coords;
+    } catch (err) {
+      console.error("No se pudieron cargar coordinadores:", err.message);
+    }
+
+    const porCoordinador = [...porCoordinadorMap.values()]
+      .map((item) => {
+        const found = coordinadores.find(
+          (c) =>
+            String(c.email).toLowerCase() ===
+            String(item.coordinador_email || "").toLowerCase(),
+        );
+
+        return {
+          coordinador_email: item.coordinador_email,
+          coordinador_nombre:
+            found?.nombre || item.coordinador_email || "Sin asignar",
+          revisadas: item.revisadas,
+          aprobadas: item.aprobadas,
+          rechazadas: item.rechazadas,
+          observadas: item.observadas,
+          pendientes: item.pendientes,
+        };
+      })
+      .sort((a, b) => b.revisadas - a.revisadas);
+
+    return res.json({
+      filtros: {
+        from: req.query.from || "",
+        to: req.query.to || "",
+        status: req.query.status || "all",
+        search: req.query.search || "",
+      },
+      resumen,
+      porInstitucion,
+      porEstado,
+      porCoordinador,
+      pendientesPorEstado,
+      solicitudes: normalizedRows,
+    });
+  } catch (err) {
+    console.error("Error getSolicitudesReportes:", err);
+    return res.status(500).json({
+      message: "Error obteniendo reportes",
+      error: err.message,
+    });
+  }
+}
+
 module.exports = {
   getMySolicitudes,
   getAllSolicitudes,
@@ -724,4 +942,5 @@ module.exports = {
   assignReviewer,
   returnSolicitudWithFlags,
   resubmitSolicitud,
+  getSolicitudesReportes,
 };

@@ -10,21 +10,11 @@ const {
   assignReviewer,
   returnSolicitudWithFlags,
   resubmitSolicitud,
+  getSolicitudesReportes,
 } = require("../controllers/solicitud.controller");
 
 // 🔐 middleware de autenticación
-const { authRequired } = require("../middleware/auth.middleware");
-
-console.log("handlers", {
-  getMySolicitudes: typeof getMySolicitudes,
-  getAllSolicitudes: typeof getAllSolicitudes,
-  createSolicitud: typeof createSolicitud,
-  getSolicitudDetalle: typeof getSolicitudDetalle,
-  updateStatus: typeof updateStatus,
-  assignReviewer: typeof assignReviewer,
-  returnSolicitudWithFlags: typeof returnSolicitudWithFlags,
-  resubmitSolicitud: typeof resubmitSolicitud,
-});
+const { authRequired, coordOnly } = require("../middleware/auth.middleware");
 
 /* ============================================================
    ESTUDIANTE
@@ -38,6 +28,7 @@ router.patch("/:id/resubmit", authRequired, resubmitSolicitud);
    ADMIN / COORDINADORES
 ============================================================ */
 
+router.get("/reportes", authRequired, coordOnly, getSolicitudesReportes);
 router.get("/", authRequired, getAllSolicitudes);
 router.get("/:id/detalle", authRequired, getSolicitudDetalle);
 router.patch("/:id/status", authRequired, updateStatus);
