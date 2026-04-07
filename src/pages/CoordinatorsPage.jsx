@@ -4,6 +4,7 @@ import {
   LuTicket,
   LuUsers,
   LuFile,
+  LuFileText,
   LuUserCheck,
   LuSettings,
   LuSearch,
@@ -161,7 +162,7 @@ export default function CoordinatorsPage() {
               label="Instituciones"
               href="/instituciones"
             />
-            <SidebarItem icon={LuFile} label="Reportes" href="/reportes" />
+            <SidebarItem icon={LuFileText} label="Reportes" href="/reportes" />
             <SidebarItem
               icon={LuUserCheck}
               label="Coordinadores"
@@ -414,7 +415,7 @@ function RoleModal({ isOpen, onClose, userData, onChangeRole }) {
             ) : (
               <button
                 onClick={() => onChangeRole(userData, "STUDENT")}
-                className="w-full px-4 py-3 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600"
+                className="w-full px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700"
               >
                 Quitar rol de coordinador
               </button>
@@ -439,8 +440,8 @@ function SidebarItem({ icon: Icon, label, active = false, href = "#" }) {
   const base =
     "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-sm transition-colors";
   const stateClasses = active
-    ? " bg-[#ffd600] text-gray-800"
-    : " text-slate-700 hover:bg-yellow-100";
+    ? "bg-[#1453DB] text-gray-200"
+    : "text-slate-700 hover:bg-blue-200";
 
   return (
     <a href={href} className={base + " " + stateClasses}>

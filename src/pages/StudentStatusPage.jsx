@@ -97,9 +97,6 @@ export default function StudentStatusPage({ solicitud }) {
 
             <h1 className="text-xl md:text-2xl font-bold text-slate-900">
               Estado de tu solicitud
-              <span className="text-sm font-semibold text-slate-500 ml-2">
-                #{solicitud.id}
-              </span>
             </h1>
 
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">

@@ -1,4 +1,3 @@
-// src/pages/LoginPage.jsx
 import { useMemo, useState } from "react";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import { useNavigate } from "react-router-dom";
@@ -58,7 +57,6 @@ export default function LoginPage() {
       setBusy(true);
       const u = await verifyOtp(eclean, cclean, nombre.trim());
 
-      // 🔥 IMPORTANTE: tus rutas son /admin y /portal
       if (u?.role === "COORD") navigate("/admin");
       else navigate("/portal");
     } catch (error) {
@@ -76,69 +74,95 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-[rgba(2,14,159,1)]">
-      <div className="w-full max-w-sm">
-        {/* “pantalla estilo U” */}
-        <div className="text-center mb-6">
-          <div className="mt-3 flex flex-col items-center">
+    <div className="min-h-screen relative flex items-center justify-center overflow-hidden px-4 py-8">
+      {/* Fondo con imagen */}
+      <div
+        className="absolute inset-0 bg-cover bg-center scale-105"
+        style={{
+          backgroundImage: "url('/u-de-blog-1024x644.jpg')",
+        }}
+      />
+
+      {/* Overlay institucional */}
+      <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(6,18,80,0.82)_20%,rgba(6,18,80,0.72)_40%,rgba(6,18,80,0.82)_50%)]" />
+
+      {/* Capa decorativa */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute -top-24 -left-24 w-72 h-72 bg-white/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 -right-20 w-80 h-80 bg-[#ffd600]/10 rounded-full blur-3xl" />
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[420px] h-[420px] bg-white/5 rounded-full blur-3xl" />
+      </div>
+
+      {/* Contenido */}
+      <div className="relative z-10 w-full max-w-sm animate-[fadeIn_.5s_ease-out]">
+        {/* Logo */}
+        <div className="text-center mb-6 md:mb-8">
+          <div className="flex flex-col items-center">
             <img
               src="/FideLogo-04.png"
               alt="Universidad Fidélitas"
-              className="h-15 w-auto"
+              className="h-24 md:h-28 w-auto drop-shadow-[0_10px_30px_rgba(0,0,0,0.25)]"
             />
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl border border-white/30 p-6">
-          <h2 className="text-center text-lg font-bold text-slate-900">
-            Hola, Bienvenido a TechSeed
-          </h2>
-          <p className="text-center text-sm text-slate-500 mt-1">
-            Ingresá con tu correo institucional
-          </p>
+        {/* Card */}
+        <div className="rounded-[28px] border border-white/20 bg-white/88 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.30)] p-6 md:p-7">
+          <div className="text-center">
+            <h2 className="mt-2 text-2xl font-bold text-slate-200">
+              Bienvenido a TechSeed
+            </h2>
+            <p className="text-sm text-slate-300 mt-1">
+              Ingresá con tu correo institucional
+            </p>
+          </div>
 
           {err && (
-            <div className="mt-4 text-sm bg-red-50 text-red-700 border border-red-200 rounded-xl p-3">
+            <div className="mt-5 text-sm bg-red-50/90 text-red-700 border border-red-200 rounded-2xl p-3.5 shadow-sm">
               {err}
             </div>
           )}
+
           {msg && (
-            <div className="mt-4 text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded-xl p-3">
+            <div className="mt-5 text-sm bg-blue-50/90 text-blue-700 border border-blue-200 rounded-2xl p-3.5 shadow-sm">
               {msg}
             </div>
           )}
 
           {step === 1 ? (
-            <div className="mt-5 space-y-3">
-              <input
-                type="email"
-                placeholder="Correo institucional (@ufide.ac.cr)"
-                className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-200"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-              />
+            <div className="mt-6 space-y-4">
+              <div>
+                <input
+                  type="email"
+                  placeholder="Correo institucional (@ufide.ac.cr)"
+                  className="w-full p-2.5 border border-slate-200 rounded-2xl outline-none bg-white/95 text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-blue-200 focus:border-blue-300 transition"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                />
+              </div>
 
-              <input
-                type="text"
-                placeholder="Nombre (opcional para primer ingreso)"
-                className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-200"
-                value={nombre}
-                onChange={(e) => setNombre(e.target.value)}
-              />
+              <div>
+                <input
+                  type="text"
+                  placeholder="Nombre (opcional para primer ingreso)"
+                  className="w-full p-2.5 border border-slate-200 rounded-2xl outline-none bg-white/95 text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-blue-200 focus:border-blue-300 transition"
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                />
+              </div>
 
               <button
                 onClick={handleMicrosoftClick}
                 disabled={busy}
-                className="w-full border border-slate-300 rounded-xl p-3 flex items-center justify-center gap-2 hover:bg-slate-50 disabled:opacity-60"
+                className="w-full border border-slate-200 bg-white/95 rounded-2xl p-2.5 flex items-center justify-center gap-3 hover:bg-slate-50 transition disabled:opacity-60 shadow-sm"
               >
-                <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-slate-100">
-                  {/* “logo” simple tipo Microsoft */}
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-slate-100">
                   <span className="grid grid-cols-2 gap-[2px]">
-                    <span className="w-[8px] h-[8px] bg-red-500 block" />
-                    <span className="w-[8px] h-[8px] bg-green-500 block" />
-                    <span className="w-[8px] h-[8px] bg-blue-500 block" />
-                    <span className="w-[8px] h-[8px] bg-yellow-400 block" />
+                    <span className="w-[9px] h-[9px] bg-red-500 block rounded-[1px]" />
+                    <span className="w-[9px] h-[9px] bg-green-500 block rounded-[1px]" />
+                    <span className="w-[9px] h-[9px] bg-blue-500 block rounded-[1px]" />
+                    <span className="w-[9px] h-[9px] bg-yellow-400 block rounded-[1px]" />
                   </span>
                 </span>
 
@@ -147,13 +171,18 @@ export default function LoginPage() {
                 </span>
               </button>
 
-              <p className="text-[11px] text-slate-500">Login de prueba</p>
+              <div className="flex items-center justify-between pt-1">
+                <p className="text-[11px] text-slate-500">Login de prueba</p>
+                <span className="text-[11px] px-2.5 py-1 text-slate-500">
+                  Universidad Fidélitas
+                </span>
+              </div>
             </div>
           ) : (
-            <form onSubmit={handleVerify} className="mt-5 space-y-3">
-              <div className="text-sm text-slate-700">
+            <form onSubmit={handleVerify} className="mt-6 space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-700">
                 Código enviado a:{" "}
-                <span className="font-semibold">
+                <span className="font-semibold break-all">
                   {email.trim().toLowerCase()}
                 </span>
               </div>
@@ -161,7 +190,7 @@ export default function LoginPage() {
               <input
                 inputMode="numeric"
                 placeholder="Código de 6 dígitos"
-                className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-200 tracking-widest text-center text-lg"
+                className="w-full p-2.5 border border-slate-200 rounded-2xl outline-none bg-white/95 focus:ring-2 focus:ring-blue-200 focus:border-blue-300 tracking-[0.30em] text-center text-md font-semibold text-slate-800 placeholder:tracking-normal placeholder:font-normal placeholder:text-slate-400 transition"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 maxLength={6}
@@ -169,7 +198,7 @@ export default function LoginPage() {
 
               <button
                 disabled={busy}
-                className="w-full bg-[rgba(2,14,159,1)] text-white p-3 rounded-xl font-semibold disabled:opacity-60"
+                className="w-full bg-[rgba(2,14,159,1)] text-white p-2.5 rounded-2xl font-semibold disabled:opacity-60 hover:bg-indigo-900 transition shadow-lg shadow-blue-900/20"
               >
                 {busy ? "Verificando..." : "Ingresar"}
               </button>
@@ -177,17 +206,13 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={backToEmail}
-                className="w-full p-3 rounded-xl font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50"
+                className="w-full p-2.5 rounded-2xl font-semibold border border-slate-200 text-slate-700 bg-white/90 hover:bg-slate-50 transition"
               >
                 Cambiar correo
               </button>
             </form>
           )}
         </div>
-
-        <p className="text-center text-white/70 text-xs mt-4">
-          Proyecto académico — Universidad Fidélitas
-        </p>
       </div>
     </div>
   );

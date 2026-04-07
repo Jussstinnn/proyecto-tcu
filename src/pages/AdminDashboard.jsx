@@ -4,6 +4,7 @@ import {
   LuTicket,
   LuFile,
   LuUsers,
+  LuFileText,
   LuUserCheck,
   LuEye,
   LuHand,
@@ -314,7 +315,7 @@ export default function AdminDashboard() {
               label="Instituciones"
               href="/instituciones"
             />
-            <SidebarItem icon={LuFile} label="Reportes" href="/reportes" />
+            <SidebarItem icon={LuFileText} label="Reportes" href="/reportes" />
             <SidebarItem
               icon={LuUserCheck}
               label="Coordinadores"
@@ -331,7 +332,7 @@ export default function AdminDashboard() {
               className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
             >
               <LuLogOut className="text-lg" />
-              Cerrar Sesión
+              Cerrar sesión
             </button>
           </div>
 
@@ -656,8 +657,8 @@ function SidebarItem({ icon: Icon, label, active = false, href = "#" }) {
   const base =
     "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-sm transition-colors";
   const stateClasses = active
-    ? " bg-[#ffd600] text-gray-800"
-    : " text-slate-700 hover:bg-yellow-100";
+    ? "bg-[#1453DB] text-gray-200"
+    : "text-slate-700 hover:bg-blue-200";
 
   return (
     <a href={href} className={base + " " + stateClasses}>

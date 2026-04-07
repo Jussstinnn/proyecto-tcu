@@ -13,6 +13,7 @@ import {
   LuLogOut,
   LuLock,
   LuTriangleAlert,
+  LuInfo,
 } from "react-icons/lu";
 
 import { useSolicitudes } from "../contexts/SolicitudContext";
@@ -124,6 +125,31 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
     step3: !isObservedMode || revisionConfig.proyecto,
     step4: !isObservedMode || revisionConfig.objetivos,
     step5: !isObservedMode || revisionConfig.cronograma,
+  };
+
+  const isCronogramaValid = () => {
+    const rows = Array.isArray(formData.cronogramaItems)
+      ? formData.cronogramaItems
+      : [];
+
+    if (!rows.length) return false;
+
+    return rows.every((row) => {
+      const actividad = String(row?.actividad || "").trim();
+      const tarea = String(row?.tarea || "").trim();
+      const horasRaw = String(row?.horas || "").trim();
+      const horasNum = Number(horasRaw);
+
+      return (
+        actividad &&
+        tarea &&
+        horasRaw &&
+        Number.isFinite(horasNum) &&
+        Number.isInteger(horasNum) &&
+        horasNum > 0 &&
+        horasNum <= 8
+      );
+    });
   };
 
   const showMessage = (text, type = "success") => {
@@ -380,6 +406,16 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
       } catch (err) {
         console.error("Error guardando perfil:", err);
         showMessage("No se pudo guardar tu información personal.", "error");
+        return;
+      }
+    }
+
+    if (currentStep === 5) {
+      if (!isCronogramaValid()) {
+        showMessage(
+          "Completá correctamente el cronograma. Cada fila debe tener actividad, tarea y horas entre 1 y 8.",
+          "error",
+        );
         return;
       }
     }
@@ -701,9 +737,8 @@ export default function StudentPortal() {
             Cerrar sesión
           </button>
         </div>
-
-        <div className="p-4 border-t border-slate-200 text-[11px] text-slate-400">
-          Proyecto académico – Universidad Fidélitas
+        <div className="p-4 border-t border-slate-200 text-[11px] text-slate-500">
+          © {new Date().getFullYear()} Universidad Fidélitas
         </div>
       </aside>
 
@@ -844,8 +879,8 @@ function SidebarItem({ icon: Icon, label, active, onClick }) {
   const base =
     "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-sm";
   const activeClasses = active
-    ? " bg-[#ffd600] text-gray-800"
-    : " text-slate-700 hover:bg-yellow-100";
+    ? " bg-[#1453DB] text-gray-200"
+    : " text-slate-700 hover:bg-blue-200";
 
   return (
     <button onClick={onClick} className={base + activeClasses}>
@@ -977,13 +1012,6 @@ function AlreadySubmittedCard({ solicitud, goToEstado }) {
       </div>
 
       <div className="grid md:grid-cols-2 gap-4 mb-6">
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <p className="text-xs text-slate-500">Número de Solicitud:</p>
-          <p className="text-sm font-semibold text-slate-900 mt-1">
-            {solicitud?.id || `#${solicitud?.codigo_publico || ""}`}
-          </p>
-        </div>
-
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
           <p className="text-xs text-slate-500">Estado actual:</p>
           <p className="text-sm font-semibold text-slate-900 mt-1">
@@ -1543,6 +1571,128 @@ function Step2_Institucion({
 }
 
 function Step3_ProyectoU({ formData, handleChange, disabled = false }) {
+  const [aiLoadingField, setAiLoadingField] = useState(null);
+  const [aiResultByField, setAiResultByField] = useState({});
+
+  const askAI = async (field, text) => {
+    if (disabled) return;
+
+    try {
+      setAiLoadingField(field);
+
+      const res = await api.post("/ai/redaccion", {
+        step: 3,
+        field,
+        text,
+        formData,
+      });
+
+      setAiResultByField((prev) => ({
+        ...prev,
+        [field]: res.data,
+      }));
+    } catch (err) {
+      console.error("Error usando IA en Step 3:", err);
+      toast.error("No se pudo obtener ayuda de IA.");
+    } finally {
+      setAiLoadingField(null);
+    }
+  };
+
+  const applySuggestion = (field) => {
+    const suggestion = aiResultByField?.[field]?.suggestion || "";
+    if (!suggestion) return;
+
+    handleChange({
+      target: {
+        name: field,
+        value: suggestion,
+      },
+    });
+
+    toast.success("Sugerencia aplicada correctamente.");
+  };
+
+  const renderAIBox = (field) => {
+    const result = aiResultByField?.[field];
+    if (!result) return null;
+
+    return (
+      <div className="mt-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <p className="text-sm font-semibold text-slate-800">Análisis de IA</p>
+        </div>
+
+        {!!result.issues?.length && (
+          <div className="mb-3">
+            <p className="text-xs font-semibold text-amber-800 mb-1">
+              Observaciones
+            </p>
+            <ul className="list-disc list-inside text-xs text-amber-700 space-y-1">
+              {result.issues.map((item, idx) => (
+                <li key={idx}>
+                  {typeof item === "string"
+                    ? item
+                    : item?.description || item?.issue || "Observación"}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {!!result.tips?.length && (
+          <div className="mb-3">
+            <p className="text-xs font-semibold text-slate-700 mb-1">
+              Recomendaciones
+            </p>
+            <ul className="list-disc list-inside text-xs text-slate-600 space-y-1">
+              {result.tips.map((tip, idx) => (
+                <li key={idx}>{tip}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="rounded-xl border border-blue-100 bg-white p-3">
+          <p className="text-xs font-semibold text-slate-700 mb-1">
+            Redacción sugerida
+          </p>
+          <p className="text-sm text-slate-700 whitespace-pre-line">
+            {result.suggestion || "No se recibió sugerencia."}
+          </p>
+        </div>
+
+        <div className="flex justify-end mt-3">
+          <button
+            type="button"
+            onClick={() => applySuggestion(field)}
+            className="px-3 py-2 text-xs bg-[rgba(2,14,159,1)] text-white rounded-lg hover:bg-indigo-900"
+          >
+            Usar sugerencia
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const textAreaClass = (disabled) =>
+    `w-full p-2 border rounded-md ${
+      disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
+    }`;
+
+  const aiButton = (field, text, label = "Ayudarme con IA") => (
+    <div className="flex justify-end mt-2">
+      <button
+        type="button"
+        onClick={() => askAI(field, text)}
+        disabled={disabled || aiLoadingField === field}
+        className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold disabled:opacity-50"
+      >
+        {aiLoadingField === field ? "Analizando..." : `✨ ${label}`}
+      </button>
+    </div>
+  );
+
   return (
     <div className={disabled ? "opacity-70" : ""}>
       <h3 className="text-lg font-semibold mb-4">Paso 3: Datos del proyecto</h3>
@@ -1551,57 +1701,91 @@ function Step3_ProyectoU({ formData, handleChange, disabled = false }) {
         <SectionLockedNotice text="La sección de proyecto no fue habilitada para corrección." />
       )}
 
-      <div className="space-y-4 text-sm">
-        <textarea
-          name="tituloProyecto"
-          value={formData.tituloProyecto}
-          onChange={handleChange}
-          disabled={disabled}
-          placeholder="Título del proyecto"
-          className={`w-full p-2 border rounded-md h-16 ${
-            disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
-          }`}
-        />
-        <textarea
-          name="justificacion"
-          value={formData.justificacion}
-          onChange={handleChange}
-          disabled={disabled}
-          placeholder="Descripción del problema"
-          className={`w-full p-2 border rounded-md h-20 ${
-            disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
-          }`}
-        />
-        <textarea
-          name="objetivoGeneral"
-          value={formData.objetivoGeneral}
-          onChange={handleChange}
-          disabled={disabled}
-          placeholder="Objetivo general"
-          className={`w-full p-2 border rounded-md h-16 ${
-            disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
-          }`}
-        />
-        <textarea
-          name="beneficiarios"
-          value={formData.beneficiarios}
-          onChange={handleChange}
-          disabled={disabled}
-          placeholder="¿A quién se beneficiará el proyecto?"
-          className={`w-full p-2 border rounded-md h-16 ${
-            disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
-          }`}
-        />
-        <textarea
-          name="estrategiaSolucion"
-          value={formData.estrategiaSolucion}
-          onChange={handleChange}
-          disabled={disabled}
-          placeholder="Estrategia y pertinencia de solución (actividades principales)"
-          className={`w-full p-2 border rounded-md h-20 ${
-            disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
-          }`}
-        />
+      <div className="space-y-5 text-sm">
+        <div>
+          <textarea
+            name="tituloProyecto"
+            value={formData.tituloProyecto}
+            onChange={handleChange}
+            disabled={disabled}
+            placeholder="Título del proyecto"
+            className={`${textAreaClass(disabled)} h-16`}
+          />
+          {aiButton(
+            "tituloProyecto",
+            formData.tituloProyecto,
+            "Analizar título",
+          )}
+          {renderAIBox("tituloProyecto")}
+        </div>
+
+        <div>
+          <textarea
+            name="justificacion"
+            value={formData.justificacion}
+            onChange={handleChange}
+            disabled={disabled}
+            placeholder="Descripción del problema"
+            className={`${textAreaClass(disabled)} h-20`}
+          />
+          {aiButton(
+            "justificacion",
+            formData.justificacion,
+            "Analizar descripción",
+          )}
+          {renderAIBox("justificacion")}
+        </div>
+
+        <div>
+          <textarea
+            name="objetivoGeneral"
+            value={formData.objetivoGeneral}
+            onChange={handleChange}
+            disabled={disabled}
+            placeholder="Objetivo general"
+            className={`${textAreaClass(disabled)} h-16`}
+          />
+          {aiButton(
+            "objetivoGeneral",
+            formData.objetivoGeneral,
+            "Analizar objetivo",
+          )}
+          {renderAIBox("objetivoGeneral")}
+        </div>
+
+        <div>
+          <textarea
+            name="beneficiarios"
+            value={formData.beneficiarios}
+            onChange={handleChange}
+            disabled={disabled}
+            placeholder="¿A quién se beneficiará el proyecto?"
+            className={`${textAreaClass(disabled)} h-16`}
+          />
+          {aiButton(
+            "beneficiarios",
+            formData.beneficiarios,
+            "Analizar beneficiarios",
+          )}
+          {renderAIBox("beneficiarios")}
+        </div>
+
+        <div>
+          <textarea
+            name="estrategiaSolucion"
+            value={formData.estrategiaSolucion}
+            onChange={handleChange}
+            disabled={disabled}
+            placeholder="Estrategia y pertinencia de solución (actividades principales)"
+            className={`${textAreaClass(disabled)} h-20`}
+          />
+          {aiButton(
+            "estrategiaSolucion",
+            formData.estrategiaSolucion,
+            "Analizar estrategia",
+          )}
+          {renderAIBox("estrategiaSolucion")}
+        </div>
       </div>
     </div>
   );
@@ -1615,6 +1799,104 @@ function Step4_ObjetivosEspecificos({
   disabled = false,
 }) {
   const items = formData.objetivosEspecificosItems || [""];
+
+  const [aiLoadingIndex, setAiLoadingIndex] = useState(null);
+  const [aiResultByIndex, setAiResultByIndex] = useState({});
+
+  const askAIObjective = async (idx, text) => {
+    if (disabled) return;
+
+    try {
+      setAiLoadingIndex(idx);
+
+      const res = await api.post("/ai/redaccion", {
+        step: 4,
+        field: "objetivoEspecifico",
+        text,
+        formData,
+      });
+
+      setAiResultByIndex((prev) => ({
+        ...prev,
+        [idx]: res.data,
+      }));
+    } catch (err) {
+      console.error("Error usando IA en Step 4:", err);
+      toast.error("No se pudo obtener ayuda de IA.");
+    } finally {
+      setAiLoadingIndex(null);
+    }
+  };
+
+  const applySuggestion = (idx) => {
+    const suggestion = aiResultByIndex?.[idx]?.suggestion || "";
+    if (!suggestion) return;
+
+    updateObjetivo(idx, suggestion);
+    toast.success("Sugerencia aplicada correctamente.");
+  };
+
+  const renderObjectiveAIBox = (idx) => {
+    const result = aiResultByIndex?.[idx];
+    if (!result) return null;
+
+    return (
+      <div className="mt-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <p className="text-sm font-semibold text-slate-800">Análisis de IA</p>
+        </div>
+
+        {!!result.issues?.length && (
+          <div className="mb-3">
+            <p className="text-xs font-semibold text-amber-800 mb-1">
+              Observaciones
+            </p>
+            <ul className="list-disc list-inside text-xs text-amber-700 space-y-1">
+              {result.issues.map((item, i) => (
+                <li key={i}>
+                  {typeof item === "string"
+                    ? item
+                    : item?.description || item?.issue || "Observación"}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {!!result.tips?.length && (
+          <div className="mb-3">
+            <p className="text-xs font-semibold text-slate-700 mb-1">
+              Recomendaciones
+            </p>
+            <ul className="list-disc list-inside text-xs text-slate-600 space-y-1">
+              {result.tips.map((tip, i) => (
+                <li key={i}>{tip}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="rounded-xl border border-blue-100 bg-white p-3">
+          <p className="text-xs font-semibold text-slate-700 mb-1">
+            Objetivo sugerido
+          </p>
+          <p className="text-sm text-slate-700 whitespace-pre-line">
+            {result.suggestion || "No se recibió sugerencia."}
+          </p>
+        </div>
+
+        <div className="flex justify-end mt-3">
+          <button
+            type="button"
+            onClick={() => applySuggestion(idx)}
+            className="px-3 py-2 text-xs bg-[rgba(2,14,159,1)] text-white rounded-lg hover:bg-indigo-900"
+          >
+            Usar sugerencia
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className={disabled ? "opacity-70" : ""}>
@@ -1631,37 +1913,57 @@ function Step4_ObjetivosEspecificos({
         necesités.
       </p>
 
-      <div className="space-y-3">
+      <div className="space-y-4">
         {items.map((obj, idx) => (
-          <div key={idx} className="flex gap-2 items-start">
-            <div className="flex-1">
-              <input
-                value={obj}
-                onChange={(e) => updateObjetivo(idx, e.target.value)}
-                disabled={disabled}
-                placeholder={`Objetivo específico #${idx + 1}`}
-                className={`w-full p-2 border rounded-md text-sm ${
-                  disabled
-                    ? "bg-slate-100 text-slate-500 cursor-not-allowed"
-                    : ""
-                }`}
-              />
-              {!obj.trim() && !disabled && (
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Escribí un objetivo para poder guardarlo.
-                </p>
-              )}
-            </div>
+          <div key={idx} className="rounded-xl border border-slate-200 p-3">
+            <div className="flex gap-2 items-start">
+              <div className="flex-1">
+                <input
+                  value={obj}
+                  onChange={(e) => updateObjetivo(idx, e.target.value)}
+                  disabled={disabled}
+                  placeholder={`Objetivo específico #${idx + 1}`}
+                  className={`w-full p-2 border rounded-md text-sm ${
+                    disabled
+                      ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                      : ""
+                  }`}
+                />
 
-            <button
-              type="button"
-              onClick={() => removeObjetivo(idx)}
-              disabled={items.length === 1 || disabled}
-              className="px-3 py-2 text-xs bg-slate-200 rounded-md disabled:opacity-50 hover:bg-slate-300"
-              title="Quitar"
-            >
-              Quitar
-            </button>
+                {!obj.trim() && !disabled && (
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Escribí un objetivo para poder guardarlo.
+                  </p>
+                )}
+
+                {!disabled && (
+                  <div className="flex justify-end mt-2">
+                    <button
+                      type="button"
+                      onClick={() => askAIObjective(idx, obj)}
+                      disabled={aiLoadingIndex === idx}
+                      className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold disabled:opacity-50"
+                    >
+                      {aiLoadingIndex === idx
+                        ? "Analizando..."
+                        : "✨ Analizar Objetivo Específico"}
+                    </button>
+                  </div>
+                )}
+
+                {renderObjectiveAIBox(idx)}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => removeObjetivo(idx)}
+                disabled={items.length === 1 || disabled}
+                className="px-3 py-2 text-xs bg-slate-200 rounded-md disabled:opacity-50 hover:bg-slate-300"
+                title="Quitar"
+              >
+                Quitar
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -1685,8 +1987,69 @@ function Step5_Cronograma({ formData, setFormData, disabled = false }) {
     { actividad: "", tarea: "", horas: "" },
   ];
 
+  const [showHoursHelp, setShowHoursHelp] = useState(false);
+  const [touchedRows, setTouchedRows] = useState({});
+
+  const getRowErrors = (row) => {
+    const actividad = String(row?.actividad || "").trim();
+    const tarea = String(row?.tarea || "").trim();
+    const horasRaw = String(row?.horas || "").trim();
+
+    const errors = {
+      actividad: !actividad,
+      tarea: !tarea,
+      horas: false,
+      horasMensaje: "",
+    };
+
+    if (!horasRaw) {
+      errors.horas = true;
+      errors.horasMensaje = "Las horas son obligatorias.";
+    } else {
+      const horasNum = Number(horasRaw);
+
+      if (!Number.isFinite(horasNum) || !Number.isInteger(horasNum)) {
+        errors.horas = true;
+        errors.horasMensaje = "Ingresá un número entero.";
+      } else if (horasNum <= 0) {
+        errors.horas = true;
+        errors.horasMensaje = "Debe ser mayor a 0 horas.";
+      } else if (horasNum > 8) {
+        errors.horas = true;
+        errors.horasMensaje = "El máximo permitido es 8 horas.";
+      }
+    }
+
+    return errors;
+  };
+
+  const rowHasErrors = (row) => {
+    const errors = getRowErrors(row);
+    return errors.actividad || errors.tarea || errors.horas;
+  };
+
+  const markRowTouched = (idx) => {
+    setTouchedRows((prev) => ({ ...prev, [idx]: true }));
+  };
+
   const addRow = () => {
     if (disabled) return;
+
+    const invalidIndexes = items
+      .map((row, idx) => ({ row, idx }))
+      .filter(({ row }) => rowHasErrors(row))
+      .map(({ idx }) => idx);
+
+    if (invalidIndexes.length > 0) {
+      const nextTouched = {};
+      invalidIndexes.forEach((idx) => {
+        nextTouched[idx] = true;
+      });
+
+      setTouchedRows((prev) => ({ ...prev, ...nextTouched }));
+      return;
+    }
+
     setFormData((prev) => ({
       ...prev,
       cronogramaItems: [...items, { actividad: "", tarea: "", horas: "" }],
@@ -1695,9 +2058,11 @@ function Step5_Cronograma({ formData, setFormData, disabled = false }) {
 
   const removeRow = (idx) => {
     if (disabled) return;
+
     setFormData((prev) => {
       const next = [...items];
       next.splice(idx, 1);
+
       return {
         ...prev,
         cronogramaItems: next.length
@@ -1705,20 +2070,87 @@ function Step5_Cronograma({ formData, setFormData, disabled = false }) {
           : [{ actividad: "", tarea: "", horas: "" }],
       };
     });
+
+    setTouchedRows((prev) => {
+      const clone = { ...prev };
+      delete clone[idx];
+      return clone;
+    });
   };
 
   const updateRow = (idx, field, value) => {
     if (disabled) return;
+
+    let nextValue = value;
+
+    if (field === "horas") {
+      nextValue = String(value).replace(/[^\d]/g, "");
+    }
+
     setFormData((prev) => {
       const next = [...items];
-      next[idx] = { ...next[idx], [field]: value };
+      next[idx] = { ...next[idx], [field]: nextValue };
       return { ...prev, cronogramaItems: next };
     });
   };
 
+  const getInputClass = (hasError, isDisabled) => {
+    const base =
+      "w-full p-2 rounded-md border outline-none transition-all text-sm";
+
+    if (isDisabled) {
+      return `${base} bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200`;
+    }
+
+    if (hasError) {
+      return `${base} border-red-400 bg-red-50 text-slate-800 placeholder:text-red-300 focus:ring-2 focus:ring-red-200 focus:border-red-500`;
+    }
+
+    return `${base} border-slate-300 bg-white text-slate-800 focus:ring-2 focus:ring-blue-100 focus:border-[rgba(2,14,159,1)]`;
+  };
+
+  const totalHoras = items.reduce((acc, row) => {
+    const n = Number(row?.horas || 0);
+    return Number.isFinite(n) ? acc + n : acc;
+  }, 0);
+
   return (
     <div className={disabled ? "opacity-70" : ""}>
-      <h3 className="text-lg font-semibold mb-4">Paso 5: Cronograma</h3>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <h3 className="text-lg font-semibold">Paso 5: Cronograma</h3>
+
+        <div className="flex items-center gap-2">
+          <div className="text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-700 font-medium">
+            Total horas: {totalHoras}
+          </div>
+
+          <div className="relative">
+            <button
+              type="button"
+              onMouseEnter={() => setShowHoursHelp(true)}
+              onMouseLeave={() => setShowHoursHelp(false)}
+              onClick={() => setShowHoursHelp((prev) => !prev)}
+              className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center text-slate-600"
+            >
+              <LuInfo className="text-base" />
+            </button>
+
+            {showHoursHelp && (
+              <div className="absolute right-0 top-10 z-20 w-72 rounded-2xl border border-slate-200 bg-white shadow-xl p-4">
+                <p className="text-sm font-semibold text-slate-800 mb-1">
+                  Reglas para el cronograma
+                </p>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Cada fila del cronograma debe completarse obligatoriamente con
+                  los campos de actividad, tarea y horas. El campo de horas debe
+                  ser un valor numérico válido entre 1 y 8, por lo que no se
+                  permite ingresar valores iguales a 0.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       {disabled && (
         <SectionLockedNotice text="La sección de cronograma no fue habilitada para corrección." />
@@ -1728,78 +2160,106 @@ function Step5_Cronograma({ formData, setFormData, disabled = false }) {
         Agregá actividades, tareas y horas estimadas.
       </p>
 
-      <div className="overflow-x-auto border rounded-xl">
+      <div className="overflow-x-auto border border-slate-200 rounded-xl">
         <table className="w-full text-sm">
           <thead className="bg-slate-50">
             <tr className="text-left">
               <th className="p-3 border-b">Actividad</th>
               <th className="p-3 border-b">Tarea</th>
-              <th className="p-3 border-b w-28">Horas</th>
+              <th className="p-3 border-b w-32">Horas</th>
               <th className="p-3 border-b w-24"></th>
             </tr>
           </thead>
           <tbody>
-            {items.map((row, idx) => (
-              <tr key={idx} className="bg-white">
-                <td className="p-2 border-b">
-                  <input
-                    className={`w-full p-2 border rounded-md ${
-                      disabled
-                        ? "bg-slate-100 text-slate-500 cursor-not-allowed"
-                        : ""
-                    }`}
-                    value={row.actividad}
-                    disabled={disabled}
-                    onChange={(e) =>
-                      updateRow(idx, "actividad", e.target.value)
-                    }
-                    placeholder="Ej: Diagnóstico"
-                  />
-                </td>
-                <td className="p-2 border-b">
-                  <input
-                    className={`w-full p-2 border rounded-md ${
-                      disabled
-                        ? "bg-slate-100 text-slate-500 cursor-not-allowed"
-                        : ""
-                    }`}
-                    value={row.tarea}
-                    disabled={disabled}
-                    onChange={(e) => updateRow(idx, "tarea", e.target.value)}
-                    placeholder="Ej: Recolección de información"
-                  />
-                </td>
-                <td className="p-2 border-b">
-                  <input
-                    className={`w-full p-2 border rounded-md ${
-                      disabled
-                        ? "bg-slate-100 text-slate-500 cursor-not-allowed"
-                        : ""
-                    }`}
-                    value={row.horas}
-                    disabled={disabled}
-                    onChange={(e) => updateRow(idx, "horas", e.target.value)}
-                    placeholder="8 Max"
-                    inputMode="numeric"
-                  />
-                </td>
-                <td className="p-2 border-b text-right">
-                  <button
-                    type="button"
-                    onClick={() => removeRow(idx)}
-                    disabled={items.length === 1 || disabled}
-                    className="px-3 py-2 text-xs bg-slate-200 rounded-md disabled:opacity-50 hover:bg-slate-300"
-                  >
-                    Quitar
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {items.map((row, idx) => {
+              const errors = getRowErrors(row);
+              const touched = !!touchedRows[idx];
+
+              return (
+                <tr key={idx} className="bg-white align-top">
+                  <td className="p-2 border-b">
+                    <input
+                      className={getInputClass(
+                        touched && errors.actividad,
+                        disabled,
+                      )}
+                      value={row.actividad}
+                      disabled={disabled}
+                      onBlur={() => markRowTouched(idx)}
+                      onChange={(e) =>
+                        updateRow(idx, "actividad", e.target.value)
+                      }
+                      placeholder="Ej: Diagnóstico"
+                    />
+                    {touched && errors.actividad && (
+                      <p className="mt-1 text-[11px] text-red-600">
+                        La actividad es obligatoria.
+                      </p>
+                    )}
+                  </td>
+
+                  <td className="p-2 border-b">
+                    <input
+                      className={getInputClass(
+                        touched && errors.tarea,
+                        disabled,
+                      )}
+                      value={row.tarea}
+                      disabled={disabled}
+                      onBlur={() => markRowTouched(idx)}
+                      onChange={(e) => updateRow(idx, "tarea", e.target.value)}
+                      placeholder="Ej: Recolección de información"
+                    />
+                    {touched && errors.tarea && (
+                      <p className="mt-1 text-[11px] text-red-600">
+                        La tarea es obligatoria.
+                      </p>
+                    )}
+                  </td>
+
+                  <td className="p-2 border-b">
+                    <input
+                      className={getInputClass(
+                        touched && errors.horas,
+                        disabled,
+                      )}
+                      value={row.horas}
+                      disabled={disabled}
+                      onBlur={() => markRowTouched(idx)}
+                      onChange={(e) => updateRow(idx, "horas", e.target.value)}
+                      placeholder="1 a 8"
+                      inputMode="numeric"
+                    />
+                    {touched && errors.horas && (
+                      <p className="mt-1 text-[11px] text-red-600">
+                        {errors.horasMensaje}
+                      </p>
+                    )}
+                  </td>
+
+                  <td className="p-2 border-b text-right">
+                    <button
+                      type="button"
+                      onClick={() => removeRow(idx)}
+                      disabled={items.length === 1 || disabled}
+                      className="px-3 py-2 text-xs bg-slate-200 rounded-md disabled:opacity-50 hover:bg-slate-300"
+                    >
+                      Quitar
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
-      <div className="flex justify-end mt-3">
+      <div className="flex justify-between mt-3 gap-3 flex-wrap">
+        <p className="text-xs text-slate-500">
+          No se puede agregar una nueva fila si la anterior está vacía o tiene
+          horas inválidas.
+        </p>
+
         <button
           type="button"
           onClick={addRow}

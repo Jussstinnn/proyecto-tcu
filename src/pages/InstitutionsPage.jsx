@@ -590,8 +590,8 @@ function SidebarItem({ icon: Icon, label, active = false, href = "#" }) {
   const base =
     "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-sm transition-colors";
   const stateClasses = active
-    ? " bg-[#ffd600] text-gray-800"
-    : " text-slate-700 hover:bg-yellow-100";
+    ? "bg-[#1453DB] text-gray-200"
+    : "text-slate-700 hover:bg-blue-200";
 
   return (
     <a href={href} className={base + " " + stateClasses}>
