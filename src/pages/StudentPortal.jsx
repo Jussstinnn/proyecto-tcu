@@ -152,6 +152,18 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
     });
   };
 
+  const areFirstThreeObjetivosValid = () => {
+    const items = Array.isArray(formData.objetivosEspecificosItems)
+      ? formData.objetivosEspecificosItems
+      : [];
+
+    if (items.length < 3) return false;
+
+    return items
+      .slice(0, 3)
+      .every((item) => String(item || "").trim().length > 0);
+  };
+
   const showMessage = (text, type = "success") => {
     if (type === "error") {
       toast.error(text);
@@ -368,10 +380,15 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
   const removeObjetivo = (index) => {
     setFormData((prev) => {
       const arr = [...prev.objetivosEspecificosItems];
+
+      // No permitir bajar de 3 objetivos
+      if (arr.length <= 3) return prev;
+
       arr.splice(index, 1);
+
       return {
         ...prev,
-        objetivosEspecificosItems: arr.length ? arr : [""],
+        objetivosEspecificosItems: arr,
       };
     });
   };
@@ -406,6 +423,15 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
       } catch (err) {
         console.error("Error guardando perfil:", err);
         showMessage("No se pudo guardar tu información personal.", "error");
+        return;
+      }
+    }
+    if (currentStep === 4) {
+      if (!areFirstThreeObjetivosValid()) {
+        showMessage(
+          "Debes completar los primeros 3 objetivos específicos para continuar.",
+          "error",
+        );
         return;
       }
     }
@@ -1570,6 +1596,61 @@ function Step2_Institucion({
   );
 }
 
+function aiItemToText(item) {
+  if (typeof item === "string") return item;
+  if (typeof item === "number" || typeof item === "boolean")
+    return String(item);
+  if (item && typeof item === "object") {
+    return (
+      item.description ||
+      item.issue ||
+      item.tip ||
+      item.text ||
+      item.message ||
+      JSON.stringify(item)
+    );
+  }
+  return "";
+}
+
+function aiSuggestionToText(value) {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean")
+    return String(value);
+  if (value && typeof value === "object") {
+    return (
+      value.suggestion ||
+      value.text ||
+      value.description ||
+      value.message ||
+      JSON.stringify(value, null, 2)
+    );
+  }
+  return "";
+}
+
+function normalizeAiResult(result) {
+  if (!result || typeof result !== "object") {
+    return {
+      score: 70,
+      issues: [],
+      tips: [],
+      suggestion: "",
+    };
+  }
+
+  return {
+    score: Number.isFinite(Number(result.score)) ? Number(result.score) : 70,
+    issues: Array.isArray(result.issues)
+      ? result.issues.map(aiItemToText).filter(Boolean)
+      : [],
+    tips: Array.isArray(result.tips)
+      ? result.tips.map(aiItemToText).filter(Boolean)
+      : [],
+    suggestion: aiSuggestionToText(result.suggestion),
+  };
+}
+
 function Step3_ProyectoU({ formData, handleChange, disabled = false }) {
   const [aiLoadingField, setAiLoadingField] = useState(null);
   const [aiResultByField, setAiResultByField] = useState({});
@@ -1587,9 +1668,11 @@ function Step3_ProyectoU({ formData, handleChange, disabled = false }) {
         formData,
       });
 
+      const normalized = normalizeAiResult(res.data);
+
       setAiResultByField((prev) => ({
         ...prev,
-        [field]: res.data,
+        [field]: normalized,
       }));
     } catch (err) {
       console.error("Error usando IA en Step 3:", err);
@@ -1600,7 +1683,7 @@ function Step3_ProyectoU({ formData, handleChange, disabled = false }) {
   };
 
   const applySuggestion = (field) => {
-    const suggestion = aiResultByField?.[field]?.suggestion || "";
+    const suggestion = aiSuggestionToText(aiResultByField?.[field]?.suggestion);
     if (!suggestion) return;
 
     handleChange({
@@ -1630,11 +1713,7 @@ function Step3_ProyectoU({ formData, handleChange, disabled = false }) {
             </p>
             <ul className="list-disc list-inside text-xs text-amber-700 space-y-1">
               {result.issues.map((item, idx) => (
-                <li key={idx}>
-                  {typeof item === "string"
-                    ? item
-                    : item?.description || item?.issue || "Observación"}
-                </li>
+                <li key={idx}>{aiItemToText(item)}</li>
               ))}
             </ul>
           </div>
@@ -1647,7 +1726,7 @@ function Step3_ProyectoU({ formData, handleChange, disabled = false }) {
             </p>
             <ul className="list-disc list-inside text-xs text-slate-600 space-y-1">
               {result.tips.map((tip, idx) => (
-                <li key={idx}>{tip}</li>
+                <li key={idx}>{aiItemToText(tip)}</li>
               ))}
             </ul>
           </div>
@@ -1658,7 +1737,8 @@ function Step3_ProyectoU({ formData, handleChange, disabled = false }) {
             Redacción sugerida
           </p>
           <p className="text-sm text-slate-700 whitespace-pre-line">
-            {result.suggestion || "No se recibió sugerencia."}
+            {aiSuggestionToText(result.suggestion) ||
+              "No se recibió sugerencia."}
           </p>
         </div>
 
@@ -1798,7 +1878,15 @@ function Step4_ObjetivosEspecificos({
   updateObjetivo,
   disabled = false,
 }) {
-  const items = formData.objetivosEspecificosItems || [""];
+  const baseItems = Array.isArray(formData.objetivosEspecificosItems)
+    ? [...formData.objetivosEspecificosItems]
+    : [];
+
+  while (baseItems.length < 3) {
+    baseItems.push("");
+  }
+
+  const items = baseItems;
 
   const [aiLoadingIndex, setAiLoadingIndex] = useState(null);
   const [aiResultByIndex, setAiResultByIndex] = useState({});
@@ -1816,9 +1904,11 @@ function Step4_ObjetivosEspecificos({
         formData,
       });
 
+      const normalized = normalizeAiResult(res.data);
+
       setAiResultByIndex((prev) => ({
         ...prev,
-        [idx]: res.data,
+        [idx]: normalized,
       }));
     } catch (err) {
       console.error("Error usando IA en Step 4:", err);
@@ -1829,7 +1919,7 @@ function Step4_ObjetivosEspecificos({
   };
 
   const applySuggestion = (idx) => {
-    const suggestion = aiResultByIndex?.[idx]?.suggestion || "";
+    const suggestion = aiSuggestionToText(aiResultByIndex?.[idx]?.suggestion);
     if (!suggestion) return;
 
     updateObjetivo(idx, suggestion);
@@ -1853,11 +1943,7 @@ function Step4_ObjetivosEspecificos({
             </p>
             <ul className="list-disc list-inside text-xs text-amber-700 space-y-1">
               {result.issues.map((item, i) => (
-                <li key={i}>
-                  {typeof item === "string"
-                    ? item
-                    : item?.description || item?.issue || "Observación"}
-                </li>
+                <li key={i}>{aiItemToText(item)}</li>
               ))}
             </ul>
           </div>
@@ -1870,7 +1956,7 @@ function Step4_ObjetivosEspecificos({
             </p>
             <ul className="list-disc list-inside text-xs text-slate-600 space-y-1">
               {result.tips.map((tip, i) => (
-                <li key={i}>{tip}</li>
+                <li key={i}>{aiItemToText(tip)}</li>
               ))}
             </ul>
           </div>
@@ -1881,7 +1967,8 @@ function Step4_ObjetivosEspecificos({
             Objetivo sugerido
           </p>
           <p className="text-sm text-slate-700 whitespace-pre-line">
-            {result.suggestion || "No se recibió sugerencia."}
+            {aiSuggestionToText(result.suggestion) ||
+              "No se recibió sugerencia."}
           </p>
         </div>
 
@@ -1909,63 +1996,87 @@ function Step4_ObjetivosEspecificos({
       )}
 
       <p className="text-sm text-slate-600 mb-3">
-        Agregá tus objetivos específicos uno por uno. Podés agregar los que
-        necesités.
+        Debes completar obligatoriamente los primeros 3 objetivos específicos.
+        Si necesitas más, puedes agregarlos después.
       </p>
 
       <div className="space-y-4">
-        {items.map((obj, idx) => (
-          <div key={idx} className="rounded-xl border border-slate-200 p-3">
-            <div className="flex gap-2 items-start">
-              <div className="flex-1">
-                <input
-                  value={obj}
-                  onChange={(e) => updateObjetivo(idx, e.target.value)}
-                  disabled={disabled}
-                  placeholder={`Objetivo específico #${idx + 1}`}
-                  className={`w-full p-2 border rounded-md text-sm ${
-                    disabled
-                      ? "bg-slate-100 text-slate-500 cursor-not-allowed"
-                      : ""
-                  }`}
-                />
+        {items.map((obj, idx) => {
+          const isRequired = idx < 3;
+          const isEmpty = !String(obj || "").trim();
 
-                {!obj.trim() && !disabled && (
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Escribí un objetivo para poder guardarlo.
-                  </p>
-                )}
-
-                {!disabled && (
-                  <div className="flex justify-end mt-2">
-                    <button
-                      type="button"
-                      onClick={() => askAIObjective(idx, obj)}
-                      disabled={aiLoadingIndex === idx}
-                      className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold disabled:opacity-50"
-                    >
-                      {aiLoadingIndex === idx
-                        ? "Analizando..."
-                        : "✨ Analizar Objetivo Específico"}
-                    </button>
+          return (
+            <div key={idx} className="rounded-xl border border-slate-200 p-3">
+              <div className="flex gap-2 items-start">
+                <div className="flex-1">
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-700">
+                      Objetivo específico #{idx + 1}
+                    </span>
+                    {isRequired && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">
+                        Obligatorio
+                      </span>
+                    )}
                   </div>
-                )}
 
-                {renderObjectiveAIBox(idx)}
+                  <input
+                    value={obj}
+                    onChange={(e) => updateObjetivo(idx, e.target.value)}
+                    disabled={disabled}
+                    placeholder={`Objetivo específico #${idx + 1}`}
+                    className={`w-full p-2 border rounded-md text-sm ${
+                      disabled
+                        ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                        : isRequired && isEmpty
+                          ? "border-amber-300 bg-amber-50"
+                          : ""
+                    }`}
+                  />
+
+                  {isRequired && isEmpty && !disabled && (
+                    <p className="text-[11px] text-amber-700 mt-1">
+                      Este objetivo es obligatorio.
+                    </p>
+                  )}
+
+                  {!isRequired && !obj.trim() && !disabled && (
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Este objetivo adicional es opcional.
+                    </p>
+                  )}
+
+                  {!disabled && (
+                    <div className="flex justify-end mt-2">
+                      <button
+                        type="button"
+                        onClick={() => askAIObjective(idx, obj)}
+                        disabled={aiLoadingIndex === idx}
+                        className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold disabled:opacity-50"
+                      >
+                        {aiLoadingIndex === idx
+                          ? "Analizando..."
+                          : "✨ Analizar Objetivo Específico"}
+                      </button>
+                    </div>
+                  )}
+
+                  {renderObjectiveAIBox(idx)}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => removeObjetivo(idx)}
+                  disabled={items.length <= 3 || disabled}
+                  className="px-3 py-2 text-xs bg-slate-200 rounded-md disabled:opacity-50 hover:bg-slate-300"
+                  title="Quitar"
+                >
+                  Quitar
+                </button>
               </div>
-
-              <button
-                type="button"
-                onClick={() => removeObjetivo(idx)}
-                disabled={items.length === 1 || disabled}
-                className="px-3 py-2 text-xs bg-slate-200 rounded-md disabled:opacity-50 hover:bg-slate-300"
-                title="Quitar"
-              >
-                Quitar
-              </button>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="flex justify-end mt-4">

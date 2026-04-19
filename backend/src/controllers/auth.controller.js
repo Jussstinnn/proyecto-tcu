@@ -1,9 +1,7 @@
-// auth.controller.js
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const pool = require("../config/db");
 
-// Helper para firmar JWT
 function signToken(user) {
   const payload = {
     id: user.id,
@@ -17,38 +15,30 @@ function signToken(user) {
   });
 }
 
-// ============================================================
-// ✅ MOCK SSO (OTP) - SIN AZURE
-// ============================================================
-
-const ALLOWED_DOMAIN = process.env.ALLOWED_EMAIL_DOMAIN || "@ufide.ac.cr";
-const otpStore = new Map(); // email -> { code, expiresAt, attempts }
+const otpStore = new Map();
 
 function normalizeEmail(email) {
   return String(email || "")
     .trim()
     .toLowerCase();
 }
-function validateInstitutionalEmail(email) {
-  return email.endsWith(ALLOWED_DOMAIN);
-}
+
 function generateOtp() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
+
 function generateMockOid(email) {
   return `mock-oid:${email}:${Date.now()}`;
 }
 
-// POST /api/auth/mock/request
 async function requestMockOtp(req, res) {
   try {
-    const email = normalizeEmail(req.body.email);
+    console.log("BODY requestMockOtp:", req.body);
 
-    if (!email) return res.status(400).json({ message: "email es requerido" });
-    if (!validateInstitutionalEmail(email)) {
-      return res.status(400).json({
-        message: `Solo se permiten correos institucionales ${ALLOWED_DOMAIN}`,
-      });
+    const email = normalizeEmail(req.body?.email);
+
+    if (!email) {
+      return res.status(400).json({ message: "email es requerido" });
     }
 
     const code = generateOtp();
@@ -58,29 +48,27 @@ async function requestMockOtp(req, res) {
     console.log(`[MOCK-OTP] Código para ${email}: ${code} (expira 5 min)`);
 
     return res.json({
-      message: "Código enviado (modo demo). Revisa la consola del backend.",
+      message: "Código generado para pruebas",
       expiresInSeconds: 300,
+      code,
     });
   } catch (err) {
     console.error("Error requestMockOtp:", err);
-    return res.status(500).json({ message: "Error en el servidor" });
+    return res.status(500).json({
+      message: "Error en el servidor",
+      error: err.message,
+    });
   }
 }
 
-// POST /api/auth/mock/verify
 async function verifyMockOtp(req, res) {
   try {
-    const email = normalizeEmail(req.body.email);
-    const code = String(req.body.code || "").trim();
-    const nombreInput = String(req.body.nombre || "").trim();
+    const email = normalizeEmail(req.body?.email);
+    const code = String(req.body?.code || "").trim();
+    const nombreInput = String(req.body?.nombre || "").trim();
 
     if (!email || !code) {
       return res.status(400).json({ message: "email y code son requeridos" });
-    }
-    if (!validateInstitutionalEmail(email)) {
-      return res.status(400).json({
-        message: `Solo se permiten correos institucionales ${ALLOWED_DOMAIN}`,
-      });
     }
 
     const record = otpStore.get(email);
@@ -89,6 +77,7 @@ async function verifyMockOtp(req, res) {
         .status(401)
         .json({ message: "Código inválido o no solicitado" });
     }
+
     if (Date.now() > record.expiresAt) {
       otpStore.delete(email);
       return res.status(401).json({ message: "Código expirado" });
@@ -109,14 +98,12 @@ async function verifyMockOtp(req, res) {
 
     otpStore.delete(email);
 
-    // 1) Buscar usuario
     const [rows] = await pool.query(
       "SELECT id, nombre, email, role, cedula, carrera FROM users WHERE email = ? LIMIT 1",
       [email],
     );
     let user = rows[0];
 
-    // 2) Si no existe, crear STUDENT con defaults para no reventar NOT NULL
     if (!user) {
       const nombre = nombreInput || email.split("@")[0];
       const cedulaMock = "0-0000-0000";
@@ -134,7 +121,6 @@ async function verifyMockOtp(req, res) {
       );
       user = created[0];
     } else {
-      // si viene nombre y en BD está vacío => actualiza
       if (
         nombreInput &&
         (!user.nombre || String(user.nombre).trim().length === 0)
@@ -169,7 +155,6 @@ async function verifyMockOtp(req, res) {
   }
 }
 
-// GET /api/auth/me
 async function me(req, res) {
   try {
     const [rows] = await pool.query(
@@ -191,12 +176,12 @@ async function me(req, res) {
   }
 }
 
-// (register/login legacy quedan igual)
 async function register(req, res) {
-  /* ...tu código... */
+  return res.status(501).json({ message: "register no implementado" });
 }
+
 async function login(req, res) {
-  /* ...tu código... */
+  return res.status(501).json({ message: "login no implementado" });
 }
 
 module.exports = {
