@@ -127,6 +127,39 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
     step5: !isObservedMode || revisionConfig.cronograma,
   };
 
+  const isBlank = (value) => String(value || "").trim().length === 0;
+
+  const requiredFieldsByStep = {
+    1: [
+      ["nombre", "nombre completo"],
+      ["cedula", "numero de identificacion"],
+      ["carrera", "carrera"],
+      ["sede", "sede"],
+      ["estudiante_email", "correo electronico"],
+      ["estudiante_phone", "numero telefonico"],
+      ["oficio", "oficio"],
+      ["estado_civil", "estado civil"],
+      ["domicilio", "domicilio"],
+      ["lugar_trabajo", "lugar de trabajo"],
+    ],
+    2: [
+      ["institucion_id", "institucion"],
+      ["institucion", "institucion"],
+    ],
+    3: [
+      ["tituloProyecto", "titulo del proyecto"],
+      ["justificacion", "descripcion del problema"],
+      ["objetivoGeneral", "objetivo general"],
+      ["beneficiarios", "beneficiarios"],
+      ["estrategiaSolucion", "estrategia de solucion"],
+    ],
+  };
+
+  const getMissingRequiredFields = (step) =>
+    (requiredFieldsByStep[step] || [])
+      .filter(([field]) => isBlank(formData[field]))
+      .map(([, label]) => label);
+
   const isCronogramaValid = () => {
     const rows = Array.isArray(formData.cronogramaItems)
       ? formData.cronogramaItems
@@ -164,6 +197,16 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
       .every((item) => String(item || "").trim().length > 0);
   };
 
+  const areAddedObjetivosValid = () => {
+    const items = Array.isArray(formData.objetivosEspecificosItems)
+      ? formData.objetivosEspecificosItems
+      : [];
+
+    return items
+      .slice(3)
+      .every((item) => String(item || "").trim().length > 0);
+  };
+
   const showMessage = (text, type = "success") => {
     if (type === "error") {
       toast.error(text);
@@ -174,6 +217,47 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
       return;
     }
     toast.success(text);
+  };
+
+  const validateCurrentStep = () => {
+    if (!editableSections[`step${currentStep}`]) return true;
+
+    const missingFields = getMissingRequiredFields(currentStep);
+    if (missingFields.length) {
+      showMessage(
+        `Completa todos los campos requeridos antes de continuar: ${missingFields.join(", ")}.`,
+        "error",
+      );
+      return false;
+    }
+
+    if (currentStep === 4) {
+      if (!areFirstThreeObjetivosValid()) {
+        showMessage(
+          "Debes completar los primeros 3 objetivos especificos para continuar.",
+          "error",
+        );
+        return false;
+      }
+
+      if (!areAddedObjetivosValid()) {
+        showMessage(
+          "Completa los objetivos especificos adicionales o elimina los que esten vacios.",
+          "error",
+        );
+        return false;
+      }
+    }
+
+    if (currentStep === 5 && !isCronogramaValid()) {
+      showMessage(
+        "Completa correctamente el cronograma. Cada fila debe tener actividad, tarea y horas entre 1 y 8.",
+        "error",
+      );
+      return false;
+    }
+
+    return true;
   };
 
   useEffect(() => {
@@ -228,7 +312,7 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
       setLoadingInstituciones(true);
       try {
         const res = await api.get("/instituciones", {
-          params: { estado: "Aprobada" },
+          params: { estado: "Habilitada" },
         });
         const list = Array.isArray(res.data) ? res.data : [];
         setInstituciones(list);
@@ -249,39 +333,208 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
   };
 
   const downloadResumenPDF = (data) => {
-    const doc = new jsPDF();
+    const doc = new jsPDF({ unit: "mm", format: "letter" });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const marginX = 14;
-    const maxWidth = pageWidth - marginX * 2;
+    const marginX = 18;
+    const contentWidth = pageWidth - marginX * 2;
     let y = 18;
 
-    const ensurePage = (extraSpace = 12) => {
-      if (y + extraSpace > pageHeight - 14) {
-        doc.addPage();
-        y = 20;
-      }
+    const ensureSpace = (height = 14) => {
+      if (y + height <= pageHeight - 18) return;
+      addFooter();
+      doc.addPage();
+      y = 18;
+      addHeader(false);
+      y = 38;
     };
 
-    const line = (text = "", size = 11, bold = false, spacing = 7) => {
-      ensurePage(12);
-      doc.setFont("helvetica", bold ? "bold" : "normal");
-      doc.setFontSize(size);
+    const addHeader = (firstPage = true) => {
+      doc.setFillColor(15, 23, 42);
+      doc.rect(0, 0, pageWidth, firstPage ? 38 : 28, "F");
 
-      const lines = doc.splitTextToSize(String(text), maxWidth);
-      doc.text(lines, marginX, y);
-      y += lines.length * 6 + (spacing - 6);
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(firstPage ? 16 : 12);
+      doc.text(
+        firstPage
+          ? "Anteproyecto TCU para revisión"
+          : "Anteproyecto TCU para revisión",
+        marginX,
+        firstPage ? 15 : 13,
+      );
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text(
+        "Universidad Fidélitas · Coordinación TCU",
+        marginX,
+        firstPage ? 22 : 20,
+      );
+
+      doc.setFillColor(37, 99, 235);
+      doc.roundedRect(pageWidth - 70, firstPage ? 8 : 6, 52, 18, 3, 3, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.text("ESTADO", pageWidth - 65, firstPage ? 14 : 12);
+      doc.setFontSize(13);
+      doc.text(
+        isObservedMode ? "REENVIADO" : "ENVIADO",
+        pageWidth - 65,
+        firstPage ? 23 : 21,
+      );
+      doc.setTextColor(15, 23, 42);
+    };
+
+    const addFooter = () => {
+      const page = doc.internal.getNumberOfPages();
+      doc.setDrawColor(226, 232, 240);
+      doc.line(marginX, pageHeight - 14, pageWidth - marginX, pageHeight - 14);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text("Anteproyecto TCU para revisión", marginX, pageHeight - 8);
+      doc.text(`Página ${page}`, pageWidth - marginX - 18, pageHeight - 8);
+      doc.setTextColor(15, 23, 42);
     };
 
     const sectionTitle = (title) => {
-      ensurePage(18);
-      y += 3;
-      doc.setFillColor(245, 247, 250);
-      doc.rect(marginX, y - 5, maxWidth, 8, "F");
+      ensureSpace(16);
+      doc.setFillColor(241, 245, 249);
+      doc.roundedRect(marginX, y, contentWidth, 9, 2, 2, "F");
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.text(title, marginX + 2, y);
-      y += 8;
+      doc.setFontSize(10.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text(title, marginX + 3, y + 6);
+      y += 13;
+    };
+
+    const field = (label, value) => {
+      const text = String(value || "No indicado");
+      const labelWidth = 46;
+      const lines = doc.splitTextToSize(text, contentWidth - labelWidth - 4);
+      ensureSpace(Math.max(8, lines.length * 5 + 3));
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.text(`${label}:`, marginX, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(lines, marginX + labelWidth, y);
+      y += Math.max(7, lines.length * 5 + 2);
+    };
+
+    const paragraph = (text) => {
+      const lines = doc.splitTextToSize(String(text || "No indicado"), contentWidth);
+      ensureSpace(lines.length * 5 + 4);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text(lines, marginX, y);
+      y += lines.length * 5 + 4;
+    };
+
+    const bullet = (index, text) => {
+      const lines = doc.splitTextToSize(String(text || "No indicado"), contentWidth - 10);
+      ensureSpace(lines.length * 5 + 3);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.text(`${index}.`, marginX, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(lines, marginX + 8, y);
+      y += lines.length * 5 + 3;
+    };
+
+    const cronogramaTable = (items) => {
+      const widths = {
+        actividad: contentWidth * 0.36,
+        tarea: contentWidth * 0.48,
+        horas: contentWidth * 0.16,
+      };
+      const rowPadding = 3;
+      const lineHeight = 4.5;
+
+      const drawHeader = () => {
+        ensureSpace(12);
+        doc.setFillColor(15, 23, 42);
+        doc.roundedRect(marginX, y, contentWidth, 9, 2, 2, "F");
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8.5);
+        doc.text("Actividad", marginX + rowPadding, y + 6);
+        doc.text("Tarea", marginX + widths.actividad + rowPadding, y + 6);
+        doc.text(
+          "Horas",
+          marginX + widths.actividad + widths.tarea + rowPadding,
+          y + 6,
+        );
+        doc.setTextColor(15, 23, 42);
+        y += 9;
+      };
+
+      drawHeader();
+
+      items.forEach((item, index) => {
+        const actividadLines = doc.splitTextToSize(
+          item.actividad || "No indicada",
+          widths.actividad - rowPadding * 2,
+        );
+        const tareaLines = doc.splitTextToSize(
+          item.tarea || "No indicada",
+          widths.tarea - rowPadding * 2,
+        );
+        const horasLines = doc.splitTextToSize(
+          item.horas || "0",
+          widths.horas - rowPadding * 2,
+        );
+        const rowHeight =
+          Math.max(
+            actividadLines.length,
+            tareaLines.length,
+            horasLines.length,
+          ) *
+            lineHeight +
+          rowPadding * 2;
+
+        if (y + rowHeight > pageHeight - 18) {
+          addFooter();
+          doc.addPage();
+          y = 18;
+          addHeader(false);
+          y = 38;
+          drawHeader();
+        }
+
+        if (index % 2 === 0) {
+          doc.setFillColor(248, 250, 252);
+        } else {
+          doc.setFillColor(255, 255, 255);
+        }
+        doc.rect(marginX, y, contentWidth, rowHeight, "F");
+        doc.setDrawColor(226, 232, 240);
+        doc.rect(marginX, y, contentWidth, rowHeight);
+        doc.line(marginX + widths.actividad, y, marginX + widths.actividad, y + rowHeight);
+        doc.line(
+          marginX + widths.actividad + widths.tarea,
+          y,
+          marginX + widths.actividad + widths.tarea,
+          y + rowHeight,
+        );
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8.5);
+        doc.text(actividadLines, marginX + rowPadding, y + rowPadding + 3);
+        doc.text(
+          tareaLines,
+          marginX + widths.actividad + rowPadding,
+          y + rowPadding + 3,
+        );
+        doc.text(
+          horasLines,
+          marginX + widths.actividad + widths.tarea + rowPadding,
+          y + rowPadding + 3,
+        );
+        y += rowHeight;
+      });
+
+      y += 4;
     };
 
     const objetivosItems = (
@@ -302,65 +555,80 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
       }))
       .filter((r) => r.actividad || r.tarea || r.horas);
 
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.text("Anteproyecto TCU", marginX, y);
-    y += 10;
+    addHeader(true);
+    y = 48;
 
+    doc.setFillColor(239, 246, 255);
+    doc.setDrawColor(37, 99, 235);
+    doc.roundedRect(marginX, y, contentWidth, 22, 3, 3, "FD");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(30, 64, 175);
+    doc.text("DOCUMENTO PARA REVISIÓN", marginX + 4, y + 8);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text(`Fecha de generación: ${new Date().toLocaleString()}`, marginX, y);
-    y += 10;
+    doc.setFontSize(9);
+    doc.text(
+      "Este PDF contiene la versión más reciente del anteproyecto enviada desde el portal estudiantil.",
+      marginX + 4,
+      y + 15,
+      { maxWidth: contentWidth - 8 },
+    );
+    doc.setTextColor(15, 23, 42);
+    y += 32;
 
     sectionTitle("1. Datos del estudiante");
-    line(`Nombre: ${data.nombre || "No indicado"}`);
-    line(`Cédula: ${data.cedula || "No indicada"}`);
-    line(`Carrera: ${data.carrera || "No indicada"}`);
-    line(`Sede: ${data.sede || "No indicada"}`);
-    line(`Correo: ${data.estudiante_email || "No indicado"}`);
-    line(`Teléfono: ${data.estudiante_phone || "No indicado"}`);
-    line(`Oficio: ${data.oficio || "No indicado"}`);
-    line(`Estado civil: ${data.estado_civil || "No indicado"}`);
-    line(`Domicilio: ${data.domicilio || "No indicado"}`);
-    line(`Lugar de trabajo: ${data.lugar_trabajo || "No indicado"}`);
+    field("Nombre", data.nombre);
+    field("Cédula", data.cedula);
+    field("Carrera", data.carrera);
+    field("Sede", data.sede);
+    field("Correo", data.estudiante_email);
+    field("Teléfono", data.estudiante_phone);
+    field("Oficio", data.oficio);
+    field("Estado civil", data.estado_civil);
+    field("Domicilio", data.domicilio);
+    field("Lugar de trabajo", data.lugar_trabajo);
 
     sectionTitle("2. Datos de la institución");
-    line(`Institución: ${data.institucion || "No seleccionada"}`);
-    line(`Cédula jurídica: ${data.institucion_cedula || "No indicada"}`);
-    line(`Supervisor: ${data.institucion_supervisor || "No indicado"}`);
-    line(`Correo de contacto: ${data.institucion_correo || "No indicado"}`);
-    line(
-      `Tipo de servicio: ${data.institucion_tipo_servicio || "No indicado"}`,
-    );
+    field("Institución", data.institucion || "No seleccionada");
+    field("Cédula jurídica", data.institucion_cedula);
+    field("Supervisor", data.institucion_supervisor);
+    field("Correo", data.institucion_correo);
+    field("Tipo de servicio", data.institucion_tipo_servicio);
 
     sectionTitle("3. Datos del proyecto");
-    line(`Título del proyecto: ${data.tituloProyecto || "Sin título"}`);
-    line(
-      `Descripción del problema: ${data.justificacion || "Sin descripción"}`,
-    );
-    line(`Objetivo general: ${data.objetivoGeneral || "Sin objetivo general"}`);
-    line(`Beneficiarios: ${data.beneficiarios || "Sin dato"}`);
-    line(`Estrategia de solución: ${data.estrategiaSolucion || "Sin dato"}`);
+    field("Título", data.tituloProyecto || "Sin título");
+    field("Estado", isObservedMode ? "Reenviado para revisión" : "Enviado para revisión");
+    field("Fecha de generación", new Date().toLocaleString("es-CR"));
 
-    sectionTitle("4. Objetivos específicos");
+    sectionTitle("4. Descripción y justificación");
+    paragraph(data.justificacion || "Sin descripción");
+
+    sectionTitle("5. Objetivo general");
+    paragraph(data.objetivoGeneral || "Sin objetivo general");
+
+    sectionTitle("6. Beneficiarios");
+    paragraph(data.beneficiarios || "Sin dato");
+
+    sectionTitle("7. Estrategia y pertinencia de solución");
+    paragraph(data.estrategiaSolucion || "Sin dato");
+
+    sectionTitle("8. Objetivos específicos");
     if (objetivosItems.length) {
       objetivosItems.forEach((obj, index) => {
-        line(`${index + 1}. ${obj}`);
+        bullet(index + 1, obj);
       });
     } else {
-      line("No se agregaron objetivos específicos.");
+      paragraph("No se agregaron objetivos específicos.");
     }
 
-    sectionTitle("5. Cronograma");
+    sectionTitle("9. Cronograma");
     if (cronogramaItems.length) {
-      cronogramaItems.forEach((item, index) => {
-        line(`Actividad ${index + 1}: ${item.actividad || "—"}`, 11, true, 6);
-        line(`Tarea: ${item.tarea || "—"}`, 11, false, 6);
-        line(`Horas: ${item.horas || "0"}`, 11, false, 8);
-      });
+      cronogramaTable(cronogramaItems);
     } else {
-      line("No se agregaron filas de cronograma.");
+      paragraph("No se agregaron filas de cronograma.");
     }
+
+    addFooter();
 
     const safeName = String(data.nombre || "estudiante")
       .toLowerCase()
@@ -408,6 +676,8 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
   };
 
   const handleNext = async () => {
+    if (!validateCurrentStep()) return;
+
     if (currentStep === 1 && !isObservedMode) {
       try {
         await api.patch("/user/me", {
@@ -735,7 +1005,9 @@ export default function StudentPortal() {
           <SidebarItem
             icon={LuFilePlus2}
             label={
-              mySolicitud?.estado === "Observado"
+              mySolicitud?.estado === "Aprobado"
+                ? "TCU aprobado"
+                : mySolicitud?.estado === "Observado"
                 ? "Corregir anteproyecto"
                 : "Inscripción de anteproyecto"
             }
@@ -918,6 +1190,7 @@ function SidebarItem({ icon: Icon, label, active, onClick }) {
 
 function OverviewSection({ mySolicitud, goToInscripcion, goToEstado }) {
   const status = mySolicitud?.estado || "Sin anteproyecto";
+  const isApproved = status === "Aprobado";
 
   let statusClasses = "bg-slate-100 text-slate-600";
   if (status === "Aprobado") statusClasses = "bg-emerald-100 text-emerald-700";
@@ -948,10 +1221,10 @@ function OverviewSection({ mySolicitud, goToInscripcion, goToEstado }) {
             </p>
           </div>
           <button
-            onClick={goToInscripcion}
+            onClick={isApproved ? goToEstado : goToInscripcion}
             className="mt-3 text-[11px] font-semibold text-[rgba(2,14,159,1)] hover:underline"
           >
-            Ir a inscripción →
+            {isApproved ? "Ver aprobación →" : "Ir a inscripción →"}
           </button>
         </div>
 
@@ -959,10 +1232,12 @@ function OverviewSection({ mySolicitud, goToInscripcion, goToEstado }) {
           <p className="text-xs text-slate-500 mb-1">Acceso rápido</p>
           <div className="flex flex-wrap gap-2 mt-2">
             <button
-              onClick={goToInscripcion}
+              onClick={isApproved ? goToEstado : goToInscripcion}
               className="px-3 py-1 rounded-full text-[11px] font-semibold bg-slate-900 text-white"
             >
-              {mySolicitud?.estado === "Observado"
+              {isApproved
+                ? "Ver aprobación"
+                : mySolicitud?.estado === "Observado"
                 ? "Corregir anteproyecto"
                 : "Inscribir anteproyecto"}
             </button>
@@ -993,14 +1268,17 @@ function OverviewSection({ mySolicitud, goToInscripcion, goToEstado }) {
             Próximos pasos
           </h3>
           <p className="text-sm text-slate-600 mb-3">
-            Inicia la inscripción de tu anteproyecto y asegúrate de tener listos
-            tus documentos: constancia de matrícula y copia de cédula.
+            {isApproved
+              ? "Tu TCU ya fue aprobado. Consulta el estado para descargar el comprobante con tu código de aprobación."
+              : "Inicia la inscripción de tu anteproyecto y asegúrate de tener listos tus documentos: constancia de matrícula y copia de cédula."}
           </p>
           <button
-            onClick={goToInscripcion}
+            onClick={isApproved ? goToEstado : goToInscripcion}
             className="px-4 py-2 bg-[rgba(2,14,159,1)] text-white text-xs font-semibold rounded-lg shadow-sm hover:bg-indigo-900"
           >
-            {mySolicitud?.estado === "Observado"
+            {isApproved
+              ? "Ir a estado"
+              : mySolicitud?.estado === "Observado"
               ? "Corregir ahora"
               : "Comenzar inscripción ahora"}
           </button>
@@ -1011,6 +1289,8 @@ function OverviewSection({ mySolicitud, goToInscripcion, goToEstado }) {
 }
 
 function AlreadySubmittedCard({ solicitud, goToEstado }) {
+  const isApproved = solicitud?.estado === "Aprobado";
+
   return (
     <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-8 max-w-3xl">
       <div className="mb-4">
@@ -1018,22 +1298,46 @@ function AlreadySubmittedCard({ solicitud, goToEstado }) {
           Inscripción de anteproyecto
         </p>
         <h2 className="text-2xl font-semibold text-slate-900 mt-1">
-          Ya tienes un anteproyecto registrado
+          {isApproved
+            ? "Ya tienes aprobado el TCU"
+            : "Ya tienes un anteproyecto registrado"}
         </h2>
       </div>
 
-      <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 mb-6">
-        <p className="text-sm text-blue-900">
-          Tu anteproyecto ya fue enviado y actualmente se encuentra en estado{" "}
-          <span className="font-semibold">
-            {solicitud?.estado || "Enviado"}
-          </span>
-          .
+      <div
+        className={
+          "rounded-2xl px-4 py-4 mb-6 border " +
+          (isApproved
+            ? "border-emerald-200 bg-emerald-50"
+            : "border-blue-200 bg-blue-50")
+        }
+      >
+        <p
+          className={
+            "text-sm " + (isApproved ? "text-emerald-900" : "text-blue-900")
+          }
+        >
+          {isApproved
+            ? "Ya tienes aprobado el TCU. Ve a Estado para descargar tu comprobante y revisar el código de aprobación."
+            : "Tu anteproyecto ya fue enviado y actualmente se encuentra en estado "}
+          {!isApproved && (
+            <>
+              <span className="font-semibold">
+                {solicitud?.estado || "Enviado"}
+              </span>
+              .
+            </>
+          )}
         </p>
-        <p className="text-sm text-blue-800 mt-2">
-          Desde aquí no puedes crear otro anteproyecto mientras este proceso
-          siga activo. Puedes revisar el seguimiento, historial y observaciones
-          en la sección de estado.
+        <p
+          className={
+            "text-sm mt-2 " +
+            (isApproved ? "text-emerald-800" : "text-blue-800")
+          }
+        >
+          {isApproved
+            ? "No puedes registrar otro anteproyecto porque el proceso ya quedó aprobado."
+            : "Desde aquí no puedes crear otro anteproyecto mientras este proceso siga activo. Puedes revisar el seguimiento, historial y observaciones en la sección de estado."}
         </p>
       </div>
 
@@ -1044,6 +1348,14 @@ function AlreadySubmittedCard({ solicitud, goToEstado }) {
             {solicitud?.estado || "Enviado"}
           </p>
         </div>
+        {isApproved && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+            <p className="text-xs text-emerald-700">Código de aprobación:</p>
+            <p className="text-sm font-mono tracking-[0.2em] font-semibold text-emerald-900 mt-1">
+              {solicitud?.codigo_aprobacion || "Pendiente"}
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-3">
@@ -1360,7 +1672,7 @@ function Step2_Institucion({
       const nueva = res.data;
 
       onNotify(
-        "Institución enviada para aprobación. Quedará en estado Pendiente para la coordinación.",
+        "Institucion enviada para revision. Coordinacion podra habilitarla desde el catalogo.",
         "success",
       );
 
@@ -2042,7 +2354,7 @@ function Step4_ObjetivosEspecificos({
 
                   {!isRequired && !obj.trim() && !disabled && (
                     <p className="text-[11px] text-slate-400 mt-1">
-                      Este objetivo adicional es opcional.
+                      Completa este objetivo adicional o quitalo.
                     </p>
                   )}
 

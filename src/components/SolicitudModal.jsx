@@ -185,6 +185,7 @@ export default function SolicitudModal({
   if (!canRender) return null;
 
   const status = s.status || s.estado || "Enviado";
+  const codigoAprobacion = s.codigo_aprobacion || s._raw?.codigo_aprobacion || "";
 
   const nombre = legacyForm.nombre || s.estudiante_nombre || "";
   const cedula = legacyForm.cedula || s.estudiante_cedula || "";
@@ -345,6 +346,18 @@ export default function SolicitudModal({
               )}
             </div>
           )}
+
+          {status === "Aprobado" && (
+            <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              <p className="font-semibold">TCU aprobado</p>
+              <p className="mt-1">
+                Código de aprobación:{" "}
+                <span className="font-mono tracking-[0.25em] font-bold">
+                  {codigoAprobacion || "Pendiente"}
+                </span>
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="px-7 py-5 space-y-5 max-h-[62vh] overflow-y-auto">
@@ -468,6 +481,15 @@ export default function SolicitudModal({
 
               <div>
                 <p className="font-semibold mb-1 text-xs md:text-sm">
+                  Objetivo general
+                </p>
+                <Box>
+                  {objetivoGeneral || "Sin objetivo general registrado."}
+                </Box>
+              </div>
+
+              <div>
+                <p className="font-semibold mb-1 text-xs md:text-sm">
                   ¿A quién se beneficiará el proyecto?
                 </p>
                 <Box>{beneficiarios || "Sin beneficiarios registrados."}</Box>
@@ -507,15 +529,6 @@ export default function SolicitudModal({
                     Habilitar corrección
                   </label>
                 )}
-              </div>
-
-              <div>
-                <p className="font-semibold mb-1 text-xs md:text-sm">
-                  Objetivo general
-                </p>
-                <Box>
-                  {objetivoGeneral || "Sin objetivo general registrado."}
-                </Box>
               </div>
 
               <div>
