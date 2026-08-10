@@ -58,6 +58,8 @@ const initialFormData = {
 };
 
 const REQUIRED_TCU_HOURS = 150;
+const digitsOnly = (value) => String(value || "").replace(/\D/g, "");
+const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
 
 function normalizeFormData(source) {
   if (!source) return initialFormData;
@@ -218,9 +220,7 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
       ? formData.objetivosEspecificosItems
       : [];
 
-    return items
-      .slice(3)
-      .every((item) => String(item || "").trim().length > 0);
+    return items.slice(3).every((item) => String(item || "").trim().length > 0);
   };
 
   const showMessage = (text, type = "success") => {
@@ -245,6 +245,26 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
         "error",
       );
       return false;
+    }
+
+    if (currentStep === 1) {
+      if (digitsOnly(formData.cedula) !== String(formData.cedula || "")) {
+        showMessage("La identificacion debe contener solo numeros.", "error");
+        return false;
+      }
+
+      if (
+        digitsOnly(formData.estudiante_phone) !==
+        String(formData.estudiante_phone || "")
+      ) {
+        showMessage("El numero telefonico debe contener solo numeros.", "error");
+        return false;
+      }
+
+      if (!isValidEmail(formData.estudiante_email)) {
+        showMessage("Escribe un correo electronico valido.", "error");
+        return false;
+      }
     }
 
     if (currentStep === 4) {
@@ -351,13 +371,69 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const downloadResumenPDF = (data) => {
+  const downloadResumenPDF = async (data) => {
     const doc = new jsPDF({ unit: "mm", format: "letter" });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     const marginX = 18;
     const contentWidth = pageWidth - marginX * 2;
     let y = 18;
+
+    const value = (...items) =>
+      items.find((item) => String(item || "").trim()) || "";
+
+    const institutionId = data?.institucion_id;
+    const selectedInstitutionName = String(data?.institucion || "").trim();
+    const sameInstitution = (inst) =>
+      (institutionId && String(inst.id) === String(institutionId)) ||
+      (selectedInstitutionName &&
+        String(inst.nombre || "").trim().toLowerCase() ===
+          selectedInstitutionName.toLowerCase());
+
+    let institutionDetail = (instituciones || []).find(sameInstitution) || null;
+
+    if (!institutionDetail && (institutionId || selectedInstitutionName)) {
+      try {
+        const res = await api.get("/instituciones");
+        const list = Array.isArray(res.data) ? res.data : [];
+        institutionDetail = list.find(sameInstitution) || null;
+      } catch (err) {
+        console.warn("No se pudo cargar la institucion para el PDF:", err);
+      }
+    }
+
+    const institutionName = value(
+      institutionDetail?.nombre,
+      data.institucion,
+      data.institucion_nombre,
+    );
+    const institutionCedula = value(
+      institutionDetail?.cedula_juridica,
+      data.institucion_cedula,
+      data.cedula_juridica,
+    );
+    const institutionSupervisor = value(
+      institutionDetail?.supervisor_nombre,
+      data.institucion_supervisor,
+      data.supervisor_nombre,
+    );
+    const institutionSupervisorCargo = value(
+      institutionDetail?.supervisor_cargo,
+      data.institucion_supervisor_cargo,
+      data.supervisor_cargo,
+    );
+    const institutionEmail = value(
+      institutionDetail?.contacto_email,
+      institutionDetail?.supervisor_email,
+      data.institucion_correo,
+      data.contacto_email,
+      data.supervisor_email,
+    );
+    const institutionServiceType = value(
+      institutionDetail?.tipo_servicio,
+      data.institucion_tipo_servicio,
+      data.tipo_servicio,
+    );
 
     const ensureSpace = (height = 14) => {
       if (y + height <= pageHeight - 18) return;
@@ -442,7 +518,10 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
     };
 
     const paragraph = (text) => {
-      const lines = doc.splitTextToSize(String(text || "No indicado"), contentWidth);
+      const lines = doc.splitTextToSize(
+        String(text || "No indicado"),
+        contentWidth,
+      );
       ensureSpace(lines.length * 5 + 4);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
@@ -451,7 +530,10 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
     };
 
     const bullet = (index, text) => {
-      const lines = doc.splitTextToSize(String(text || "No indicado"), contentWidth - 10);
+      const lines = doc.splitTextToSize(
+        String(text || "No indicado"),
+        contentWidth - 10,
+      );
       ensureSpace(lines.length * 5 + 3);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
@@ -529,7 +611,12 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
         doc.rect(marginX, y, contentWidth, rowHeight, "F");
         doc.setDrawColor(226, 232, 240);
         doc.rect(marginX, y, contentWidth, rowHeight);
-        doc.line(marginX + widths.actividad, y, marginX + widths.actividad, y + rowHeight);
+        doc.line(
+          marginX + widths.actividad,
+          y,
+          marginX + widths.actividad,
+          y + rowHeight,
+        );
         doc.line(
           marginX + widths.actividad + widths.tarea,
           y,
@@ -608,16 +695,19 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
     field("Lugar de trabajo", data.lugar_trabajo);
 
     sectionTitle("2. Datos de la institución");
-    field("Institución", data.institucion || "No seleccionada");
-    field("Cédula jurídica", data.institucion_cedula);
-    field("Supervisor", data.institucion_supervisor);
-    field("Cargo supervisor", data.institucion_supervisor_cargo);
-    field("Correo", data.institucion_correo);
-    field("Tipo de servicio", data.institucion_tipo_servicio);
+    field("Institución", institutionName || "No seleccionada");
+    field("Cédula jurídica", institutionCedula);
+    field("Supervisor", institutionSupervisor);
+    field("Cargo supervisor", institutionSupervisorCargo);
+    field("Correo", institutionEmail);
+    field("Tipo de servicio", institutionServiceType);
 
     sectionTitle("3. Datos del proyecto");
     field("Título", data.tituloProyecto || "Sin título");
-    field("Estado", isObservedMode ? "Reenviado para revisión" : "Enviado para revisión");
+    field(
+      "Estado",
+      isObservedMode ? "Reenviado para revisión" : "Enviado para revisión",
+    );
     field("Fecha de generación", new Date().toLocaleString("es-CR"));
 
     sectionTitle("4. Descripción y justificación");
@@ -626,13 +716,7 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
     sectionTitle("5. Objetivo general");
     paragraph(data.objetivoGeneral || "Sin objetivo general");
 
-    sectionTitle("6. Beneficiarios");
-    paragraph(data.beneficiarios || "Sin dato");
-
-    sectionTitle("7. Estrategia y pertinencia de solución");
-    paragraph(data.estrategiaSolucion || "Sin dato");
-
-    sectionTitle("8. Objetivos específicos");
+    sectionTitle("6. Objetivos específicos");
     if (objetivosItems.length) {
       objetivosItems.forEach((obj, index) => {
         bullet(index + 1, obj);
@@ -640,6 +724,12 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
     } else {
       paragraph("No se agregaron objetivos específicos.");
     }
+
+    sectionTitle("7. Beneficiarios");
+    paragraph(data.beneficiarios || "Sin dato");
+
+    sectionTitle("8. Estrategia y pertinencia de solución");
+    paragraph(data.estrategiaSolucion || "Sin dato");
 
     sectionTitle("9. Cronograma");
     if (cronogramaItems.length) {
@@ -760,7 +850,7 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
     }
 
     try {
-      downloadResumenPDF(formData);
+      await downloadResumenPDF(formData);
 
       if (isObservedMode && existingSolicitud?.id) {
         await resubmitSolicitud(existingSolicitud.id, formData);
@@ -1031,8 +1121,8 @@ export default function StudentPortal() {
               mySolicitud?.estado === "Aprobado"
                 ? "TCU aprobado"
                 : mySolicitud?.estado === "Observado"
-                ? "Corregir anteproyecto"
-                : "Inscripción de anteproyecto"
+                  ? "Corregir anteproyecto"
+                  : "Inscripción de anteproyecto"
             }
             active={activeTab === "inscripcion"}
             onClick={() => setActiveTab("inscripcion")}
@@ -1103,8 +1193,8 @@ export default function StudentPortal() {
                 mySolicitud?.estado === "Aprobado"
                   ? "TCU aprobado"
                   : mySolicitud?.estado === "Observado"
-                  ? "Corregir"
-                  : "Inscripcion"
+                    ? "Corregir"
+                    : "Inscripcion"
               }
               active={activeTab === "inscripcion"}
               onClick={() => setActiveTab("inscripcion")}
@@ -1252,7 +1342,11 @@ function MobileNavItem({ icon: Icon, label, active, onClick }) {
     : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50";
 
   return (
-    <button type="button" onClick={onClick} className={base + " " + activeClasses}>
+    <button
+      type="button"
+      onClick={onClick}
+      className={base + " " + activeClasses}
+    >
       {Icon && <Icon className="text-base" />}
       <span>{label}</span>
     </button>
@@ -1309,8 +1403,8 @@ function OverviewSection({ mySolicitud, goToInscripcion, goToEstado }) {
               {isApproved
                 ? "Ver aprobación"
                 : mySolicitud?.estado === "Observado"
-                ? "Corregir anteproyecto"
-                : "Inscribir anteproyecto"}
+                  ? "Corregir anteproyecto"
+                  : "Inscribir anteproyecto"}
             </button>
             <button
               onClick={goToEstado}
@@ -1350,8 +1444,8 @@ function OverviewSection({ mySolicitud, goToInscripcion, goToEstado }) {
             {isApproved
               ? "Ir a estado"
               : mySolicitud?.estado === "Observado"
-              ? "Corregir ahora"
-              : "Comenzar inscripción ahora"}
+                ? "Corregir ahora"
+                : "Comenzar inscripción ahora"}
           </button>
         </div>
       </div>
@@ -1373,8 +1467,8 @@ function AlreadySubmittedCard({ solicitud, goToEstado }) {
           {isApproved
             ? "Ya tienes aprobado el TCU"
             : isRejected
-            ? "Tu anteproyecto fue rechazado"
-            : "Ya tienes un anteproyecto registrado"}
+              ? "Tu anteproyecto fue rechazado"
+              : "Ya tienes un anteproyecto registrado"}
         </h2>
       </div>
 
@@ -1394,8 +1488,8 @@ function AlreadySubmittedCard({ solicitud, goToEstado }) {
           {isApproved
             ? "Ya tienes aprobado el TCU. Ve a Estado para descargar tu comprobante y revisar el código de aprobación."
             : isRejected
-            ? "Tu anteproyecto fue rechazado. Puedes iniciar una nueva inscripción de TCU desde este panel."
-            : "Tu anteproyecto ya fue enviado y actualmente se encuentra en estado "}
+              ? "Tu anteproyecto fue rechazado. Puedes iniciar una nueva inscripción de TCU desde este panel."
+              : "Tu anteproyecto ya fue enviado y actualmente se encuentra en estado "}
           {!isApproved && !isRejected && (
             <>
               <span className="font-semibold">
@@ -1414,8 +1508,8 @@ function AlreadySubmittedCard({ solicitud, goToEstado }) {
           {isApproved
             ? "No puedes registrar otro anteproyecto porque el proceso ya quedó aprobado."
             : isRejected
-            ? "Revisa las observaciones anteriores en Estado si necesitas tomarlas como referencia."
-            : "Desde aquí no puedes crear otro anteproyecto mientras este proceso siga activo. Puedes revisar el seguimiento, historial y observaciones en la sección de estado."}
+              ? "Revisa las observaciones anteriores en Estado si necesitas tomarlas como referencia."
+              : "Desde aquí no puedes crear otro anteproyecto mientras este proceso siga activo. Puedes revisar el seguimiento, historial y observaciones en la sección de estado."}
         </p>
       </div>
 
@@ -1489,10 +1583,16 @@ function Step1_DatosPersonales({
           <input
             name="cedula"
             value={formData.cedula}
-            onChange={handleChange}
+            onChange={(e) =>
+              handleChange({
+                target: { name: "cedula", value: digitsOnly(e.target.value) },
+              })
+            }
             type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
             disabled={disabled}
-            placeholder="Ej: 1-2345-6789"
+            placeholder="Ej: 123456789"
             className={`p-2 border rounded-md ${
               disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
             }`}
@@ -1549,10 +1649,19 @@ function Step1_DatosPersonales({
           <input
             name="estudiante_phone"
             value={formData.estudiante_phone}
-            onChange={handleChange}
+            onChange={(e) =>
+              handleChange({
+                target: {
+                  name: "estudiante_phone",
+                  value: digitsOnly(e.target.value),
+                },
+              })
+            }
             type="tel"
+            inputMode="numeric"
+            pattern="[0-9]*"
             disabled={disabled}
-            placeholder="8888-8888"
+            placeholder="88888888"
             className={`p-2 border rounded-md ${
               disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
             }`}
@@ -1747,6 +1856,16 @@ function Step2_Institucion({
         "Por favor, completá nombre, cédula jurídica, supervisor, correo y tipo de servicio para la institución.",
         "error",
       );
+      return;
+    }
+
+    if (digitsOnly(payload.cedula_juridica) !== payload.cedula_juridica) {
+      onNotify("La cedula juridica debe contener solo numeros.", "error");
+      return;
+    }
+
+    if (!isValidEmail(payload.contacto_email)) {
+      onNotify("Escribe un correo valido para la institucion.", "error");
       return;
     }
 
@@ -1957,8 +2076,10 @@ function Step2_Institucion({
             type="text"
             placeholder="Cédula jurídica"
             className="w-full p-2 border rounded-md"
+            inputMode="numeric"
+            pattern="[0-9]*"
             value={newCedulaJuridica}
-            onChange={(e) => setNewCedulaJuridica(e.target.value)}
+            onChange={(e) => setNewCedulaJuridica(digitsOnly(e.target.value))}
           />
           <input
             type="text"
@@ -1977,6 +2098,7 @@ function Step2_Institucion({
           <input
             type="email"
             placeholder="Correo"
+            inputMode="email"
             className="w-full p-2 border rounded-md"
             value={newEmail}
             onChange={(e) => setNewEmail(e.target.value)}
@@ -2931,10 +3053,7 @@ function Step6_Resumen({ formData }) {
               label="Cargo supervisor"
               value={formData.institucion_supervisor_cargo}
             />
-            <Field
-              label="Correo"
-              value={formData.institucion_correo}
-            />
+            <Field label="Correo" value={formData.institucion_correo} />
             <Field
               label="Tipo de servicio"
               value={formData.institucion_tipo_servicio}
@@ -2955,20 +3074,26 @@ function Step6_Resumen({ formData }) {
               label="Descripción del problema"
               value={formData.justificacion}
             />
-            <Field label="Objetivo general" value={formData.objetivoGeneral} />
             <Field label="Beneficiarios" value={formData.beneficiarios} />
-            <Field
-              label="Estrategia de solución"
-              value={formData.estrategiaSolucion}
-            />
           </div>
         </div>
 
         <div className="bg-white border border-slate-200 rounded-xl p-4">
           <h4 className="text-base font-semibold text-slate-900 mb-3">
-            Objetivos específicos
+            Objetivos
           </h4>
-
+          <div className="space-y-2">
+            <h2 className="text-sm font-medium text-slate-600 mb-3">
+              Objetivo General
+            </h2>
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <span className="text-slate-800">{formData.objetivoGeneral}</span>
+            </div>
+          </div>
+          <br />
+          <h2 className="text-sm font-medium text-slate-600 mb-3">
+            Objetivos específicos
+          </h2>
           {objetivosItems.length ? (
             <div className="space-y-2">
               {objetivosItems.map((obj, i) => (
@@ -2992,9 +3117,15 @@ function Step6_Resumen({ formData }) {
 
         <div className="bg-white border border-slate-200 rounded-xl p-4">
           <h4 className="text-base font-semibold text-slate-900 mb-3">
-            Cronograma
+            Estrategia de solución y Cronograma
           </h4>
-
+          <Field
+            label="Estrategia de solución"
+            value={formData.estrategiaSolucion}
+          />
+          <h2 className="text-sm font-medium text-slate-600 mt-3 mb-3">
+            Cronograma
+          </h2>
           {cronogramaItems.length ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
@@ -3026,3 +3157,5 @@ function Step6_Resumen({ formData }) {
     </div>
   );
 }
+
+

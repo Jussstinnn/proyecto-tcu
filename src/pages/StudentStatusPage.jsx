@@ -160,44 +160,66 @@ export default function StudentStatusPage({ solicitud }) {
     const value = (...items) =>
       items.find((item) => String(item || "").trim()) || "";
 
-    if (!currentInstitutionDetail && institutionId) {
+    const selectedInstitutionName = String(institucion || "").trim();
+    const sameInstitution = (inst) =>
+      (institutionId && String(inst.id) === String(institutionId)) ||
+      (selectedInstitutionName &&
+        String(inst.nombre || "").trim().toLowerCase() ===
+          selectedInstitutionName.toLowerCase());
+
+    if (!currentInstitutionDetail && (institutionId || selectedInstitutionName)) {
       try {
         const res = await api.get("/instituciones");
         const list = Array.isArray(res.data) ? res.data : [];
-        currentInstitutionDetail =
-          list.find((inst) => String(inst.id) === String(institutionId)) ||
-          null;
+        currentInstitutionDetail = list.find(sameInstitution) || null;
         setInstitutionDetail(currentInstitutionDetail);
       } catch (err) {
-        console.warn("No se pudo cargar la institución para el PDF:", err);
+        console.warn("No se pudo cargar la institucion para el PDF:", err);
       }
     }
 
     const institutionName = value(
+      currentInstitutionDetail?.nombre,
       institucion,
       solicitud?.institucion_nombre,
-      currentInstitutionDetail?.nombre,
     );
     const institutionCedula = value(
       currentInstitutionDetail?.cedula_juridica,
       formData.institucion_cedula,
+      formData.cedula_juridica,
+      solicitud?.institucion_cedula,
+      solicitud?.cedula_juridica,
     );
     const institutionSupervisor = value(
       currentInstitutionDetail?.supervisor_nombre,
       formData.institucion_supervisor,
+      formData.supervisor_nombre,
+      solicitud?.institucion_supervisor,
+      solicitud?.supervisor_nombre,
     );
     const institutionSupervisorCargo = value(
       currentInstitutionDetail?.supervisor_cargo,
       formData.institucion_supervisor_cargo,
+      formData.supervisor_cargo,
+      solicitud?.institucion_supervisor_cargo,
+      solicitud?.supervisor_cargo,
     );
     const institutionEmail = value(
       currentInstitutionDetail?.contacto_email,
       currentInstitutionDetail?.supervisor_email,
       formData.institucion_correo,
+      formData.contacto_email,
+      formData.supervisor_email,
+      solicitud?.institucion_correo,
+      solicitud?.contacto_email,
+      solicitud?.supervisor_email,
     );
     const institutionServiceType = value(
       currentInstitutionDetail?.tipo_servicio,
       formData.institucion_tipo_servicio,
+      formData.tipo_servicio,
+      solicitud?.institucion_tipo_servicio,
+      solicitud?.tipo_servicio,
     );
 
     const ensureSpace = (height = 14) => {
@@ -459,15 +481,7 @@ export default function StudentStatusPage({ solicitud }) {
     sectionTitle("5. Objetivo general");
     paragraph(value(objetivoGeneral, solicitud?.objetivoGeneral));
 
-    sectionTitle("6. Beneficiarios");
-    paragraph(value(formData.beneficiarios, solicitud?.beneficiario));
-
-    sectionTitle("7. Estrategia y pertinencia de solución");
-    paragraph(
-      value(formData.estrategiaSolucion, solicitud?.estrategiaSolucion),
-    );
-
-    sectionTitle("8. Objetivos específicos");
+    sectionTitle("6. Objetivos específicos");
     if (objetivosItems.length) {
       objetivosItems.forEach((item, index) => bullet(index + 1, item));
     } else {
@@ -475,6 +489,14 @@ export default function StudentStatusPage({ solicitud }) {
         value(formData.objetivosEspecificos, solicitud?.objetivosEspecificos),
       );
     }
+
+    sectionTitle("7. Beneficiarios");
+    paragraph(value(formData.beneficiarios, solicitud?.beneficiario));
+
+    sectionTitle("8. Estrategia y pertinencia de solución");
+    paragraph(
+      value(formData.estrategiaSolucion, solicitud?.estrategiaSolucion),
+    );
 
     sectionTitle("9. Cronograma");
     if (cronogramaItems.length) {
@@ -762,3 +784,4 @@ export default function StudentStatusPage({ solicitud }) {
     </div>
   );
 }
+
