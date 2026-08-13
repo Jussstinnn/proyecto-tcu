@@ -310,17 +310,17 @@ function StudentWizard({ onCompleted, existingSolicitud = null }) {
         if (!u || ignore) return;
 
         setFormData((prev) => {
-          const base = isObservedMode
-            ? normalizeFormData(existingSolicitud?.formData)
+          const base = existingSolicitud?.formData
+            ? normalizeFormData(existingSolicitud.formData)
             : normalizeFormData(prev);
 
           return {
             ...base,
-            nombre: u.nombre || base.nombre || "",
-            cedula: u.cedula || base.cedula || "",
+            nombre: base.nombre || u.nombre || "",
+            cedula: base.cedula || u.cedula || "",
             carrera: base.carrera || u.carrera || "",
             sede: base.sede || u.sede || "",
-            estudiante_email: u.email || base.estudiante_email || "",
+            estudiante_email: base.estudiante_email || u.email || "",
             estudiante_phone: base.estudiante_phone || u.phone || "",
             oficio: base.oficio || u.oficio || "",
             estado_civil: base.estado_civil || u.estado_civil || "",
@@ -1032,7 +1032,7 @@ export default function StudentPortal() {
   const [activeTab, setActiveTab] = useState("overview");
   const [globalFlash, setGlobalFlash] = useState(null);
 
-  const { user, logout } = useAuth();
+  const { user, refreshUser, logout } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -1040,6 +1040,7 @@ export default function StudentPortal() {
 
     const loadData = async () => {
       try {
+        await refreshUser();
         const base = await fetchMySolicitud();
         if (!ignore && base?.id) {
           await fetchSolicitudDetalle(base.id);
@@ -1060,11 +1061,13 @@ export default function StudentPortal() {
   }, []);
 
   const displayName =
-    user?.nombre ||
+    mySolicitud?.formData?.nombre ||
     mySolicitud?.estudiante_nombre ||
-    "Estudiante Universidad Fidélitas";
+    user?.nombre ||
+    "Estudiante Universidad Fid�litas";
 
-  const displayCareer = user?.carrera || mySolicitud?.carrera || "TechSeed";
+  const displayCareer =
+    mySolicitud?.formData?.carrera || mySolicitud?.carrera || user?.carrera || "TechSeed";
 
   const handleCompletedWizard = async () => {
     try {
@@ -1972,7 +1975,18 @@ function Step2_Institucion({
               </option>
             ))}
           </select>
-
+          <button
+            type="button"
+            onClick={() => {
+              if (disabled) return;
+              setSearch("");
+              setTipoFilter("Todos");
+            }}
+            disabled={disabled}
+            className="px-4 py-2 text-xs rounded-md border border-slate-300 bg-white text-slate-700 font-semibold hover:bg-slate-50 disabled:opacity-50"
+          >
+            Limpiar filtros
+          </button>
           <div className="flex-1" />
 
           <button
@@ -2304,21 +2318,32 @@ function Step3_ProyectoU({ formData, handleChange, disabled = false }) {
 
   const textAreaClass = (disabled) =>
     `w-full p-2 border rounded-md ${
-      disabled ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
+      disabled ? "bg-slate-100 text-slate-600 cursor-not-allowed overflow-hidden" : ""
     }`;
 
-  const aiButton = (field, text, label = "Ayudarme con IA") => (
-    <div className="flex justify-end mt-2">
-      <button
-        type="button"
-        onClick={() => askAI(field, text)}
-        disabled={disabled || aiLoadingField === field}
-        className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold disabled:opacity-50"
-      >
-        {aiLoadingField === field ? "Analizando..." : `✨ ${label}`}
-      </button>
-    </div>
-  );
+  const textareaRows = (value, minRows = 3) => {
+    if (!disabled) return undefined;
+    const lineCount = String(value || "").split(/\r?\n/).length;
+    const lengthRows = Math.ceil(String(value || "").length / 140);
+    return Math.max(minRows, lineCount, lengthRows);
+  };
+
+  const aiButton = (field, text, label = "Ayudarme con IA") => {
+    if (disabled) return null;
+
+    return (
+      <div className="flex justify-end mt-2">
+        <button
+          type="button"
+          onClick={() => askAI(field, text)}
+          disabled={aiLoadingField === field}
+          className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold disabled:opacity-50"
+        >
+          {aiLoadingField === field ? "Analizando..." : `✨ ${label}`}
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div className={disabled ? "opacity-70" : ""}>
@@ -2336,7 +2361,8 @@ function Step3_ProyectoU({ formData, handleChange, disabled = false }) {
             onChange={handleChange}
             disabled={disabled}
             placeholder="Título del proyecto"
-            className={`${textAreaClass(disabled)} h-16`}
+            rows={textareaRows(formData.tituloProyecto, 2)}
+            className={`${textAreaClass(disabled)} min-h-16`}
           />
           {aiButton(
             "tituloProyecto",
@@ -2353,7 +2379,8 @@ function Step3_ProyectoU({ formData, handleChange, disabled = false }) {
             onChange={handleChange}
             disabled={disabled}
             placeholder="Descripción del problema"
-            className={`${textAreaClass(disabled)} h-20`}
+            rows={textareaRows(formData.justificacion, 4)}
+            className={`${textAreaClass(disabled)} min-h-20`}
           />
           {aiButton(
             "justificacion",
@@ -2370,7 +2397,8 @@ function Step3_ProyectoU({ formData, handleChange, disabled = false }) {
             onChange={handleChange}
             disabled={disabled}
             placeholder="Objetivo general"
-            className={`${textAreaClass(disabled)} h-16`}
+            rows={textareaRows(formData.objetivoGeneral, 3)}
+            className={`${textAreaClass(disabled)} min-h-16`}
           />
           {aiButton(
             "objetivoGeneral",
@@ -2387,7 +2415,8 @@ function Step3_ProyectoU({ formData, handleChange, disabled = false }) {
             onChange={handleChange}
             disabled={disabled}
             placeholder="¿A quién se beneficiará el proyecto?"
-            className={`${textAreaClass(disabled)} h-16`}
+            rows={textareaRows(formData.beneficiarios, 3)}
+            className={`${textAreaClass(disabled)} min-h-16`}
           />
           {aiButton(
             "beneficiarios",
@@ -2404,7 +2433,8 @@ function Step3_ProyectoU({ formData, handleChange, disabled = false }) {
             onChange={handleChange}
             disabled={disabled}
             placeholder="Estrategia y pertinencia de solución (actividades principales)"
-            className={`${textAreaClass(disabled)} h-20`}
+            rows={textareaRows(formData.estrategiaSolucion, 4)}
+            className={`${textAreaClass(disabled)} min-h-20`}
           />
           {aiButton(
             "estrategiaSolucion",
@@ -3147,6 +3177,8 @@ function Step6_Resumen({ formData }) {
     </div>
   );
 }
+
+
 
 
 
